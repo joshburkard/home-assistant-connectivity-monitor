@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/joshburkard/home-assistant-connectivity-monitor/issues",
   "quality_scale": "bronze",
   "requirements": ["icmplib==3.0", "dnspython==2.8.0"],
-  "version": "0.1.00058"
+  "version": "0.1.00059"
 }

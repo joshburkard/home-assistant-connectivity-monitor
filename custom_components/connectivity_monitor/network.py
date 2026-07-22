@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import socket
 from typing import Any
 
@@ -179,27 +178,34 @@ class NetworkProbe:
         return float(response.avg_rtt)
 
     async def _get_mac_address(self, ip: str) -> str | None:
-        """Get MAC address for an IP."""
+        """Get MAC address for an IP by reading the kernel ARP table.
+
+        Reads /proc/net/arp directly (available on every Linux/HA container)
+        without shelling out to an external binary.
+        """
+        def _read_arp_table(target_ip: str) -> str | None:
+            try:
+                with open("/proc/net/arp", encoding="utf-8") as fh:
+                    for line in fh:
+                        parts = line.split()
+                        # Format: IP HW_type Flags HW_address Mask Device
+                        if len(parts) >= 4 and parts[0] == target_ip:
+                            mac = parts[3]
+                            # Skip incomplete/empty entries
+                            if mac and mac != "00:00:00:00:00:00":
+                                return mac.upper()
+            except OSError:
+                pass
+            return None
+
         try:
-            cmd = "arp -n" if not hasattr(socket, "AF_HYPERV") else "arp -a"
-            proc = await asyncio.create_subprocess_shell(
-                f"{cmd} {ip}",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, _ = await proc.communicate()
-            output = stdout.decode()
-
-            mac_match = re.search(r"([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})", output)
-            if mac_match:
-                return mac_match.group(0).upper().replace("-", ":")
-
-            _LOGGER.debug("No MAC address found in ARP for IP %s", ip)
-        except (OSError, ValueError) as err:
-            _LOGGER.error("Error getting MAC address for %s: %s", ip, err)
-            return None
-        else:
-            return None
+            mac = await self.hass.async_add_executor_job(_read_arp_table, ip)
+            if mac:
+                return mac
+            _LOGGER.debug("No MAC address found in ARP table for IP %s", ip)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("Error reading ARP table for %s: %s", ip, err)
+        return None
 
     async def _get_resolver(self):
         """Get a DNS resolver in executor."""
