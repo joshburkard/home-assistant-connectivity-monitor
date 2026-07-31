@@ -232,14 +232,14 @@ class NetworkProbe:
         try:
             try:
                 socket.inet_pton(socket.AF_INET, hostname)
-            except OSError, ValueError:
+            except (OSError, ValueError):
                 pass
             else:
                 return hostname
 
             try:
                 socket.inet_pton(socket.AF_INET6, hostname)
-            except OSError, ValueError:
+            except (OSError, ValueError):
                 pass
             else:
                 return hostname
