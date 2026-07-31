@@ -39,20 +39,19 @@ This integration allows to monitor devices and create Alert Notification and Ale
 
 Recommended to be installed via [HACS](https://github.com/hacs/integration)
 
-1. Go to HACS -> Integrations
-2. Add this repo to your HACS custom repositories:
-    - [https://github.com/joshburkard/home-assistant-connectivity-monitor](https://github.com/joshburkard/home-assistant-connectivity-monitor)
-3. Search for "Connectivity Monitor" and install.
-4. Restart Home Assistant
-5. Open Home Assistant Settings -> Devices & Serivces
-6. Shift+reload your browser to clear config flow caches.
-7. Click ADD INTEGRATION
-8. Search for "Connectivity Monitor"
-9. Define the DNS Server to use
-10. Define the Target Host to monitor, the needed protocol and port and click on `Submit`
-11. if you want to monitor additional targets check the checkbox `another` and click on `Submit`
-12. configure the interval and click on `Submit`
-13. done, if you want to edit your settings, you can click on your integration on on `CONFIGURE`
+1. [Open your Home Assistant instance and look for the Connectivity Monitor integration inside HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=joshburkard&repository=home-assistant-connectivity-monitor&category=integration)
+2. Install the integration.
+3. Restart Home Assistant
+4. Open Home Assistant Settings -> Devices & Serivces
+5. Shift+reload your browser to clear config flow caches.
+6. Click ADD INTEGRATION
+7. Search for "Connectivity Monitor"
+8. Define the DNS Server to use
+9. Define the Target Host to monitor, the needed protocol and port and click on `Submit`
+10. if you want to monitor additional targets check the checkbox `another` and click on `Submit`
+11. configure the interval and click on `Submit`
+12. done, if you want to edit your settings, you can click on your integration on on `CONFIGURE`
+13. add a LoveLace card do your dashboards
 
 ## Change Log
 
