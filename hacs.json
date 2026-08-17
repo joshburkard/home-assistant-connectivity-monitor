@@ -1,3 +1,5 @@
 {
-    "name": "Connectivity Monitor"
+    "name": "Connectivity Monitor",
+    "zip_release": true,
+    "filename": "connectivity_monitor.zip"
 }

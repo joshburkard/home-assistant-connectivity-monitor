@@ -1,0 +1,24 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  release:
+    name: Prepare Release Asset
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create ZIP archive
+        run: |
+          zip -r connectivity_monitor.zip custom_components
+
+      - name: Upload ZIP to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: connectivity_monitor.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
