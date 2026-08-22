@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -173,8 +175,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         _LOGGER.warning("Connectivity Monitor: could not register static path: %s", err)
 
     # Register card as a Lovelace resource (same as Settings > Dashboards > Resources).
-    # Must run after HA is fully started so the lovelace storage is available.
-    async def _register_lovelace_resource(_event=None):
+    async def _register_lovelace_resource(_event_or_now: Any = None) -> None:
         try:
             from homeassistant.components.lovelace.const import (  # noqa: PLC0415  # pylint: disable=hass-component-root-import
                 LOVELACE_DATA,
@@ -182,9 +183,20 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
             ll = hass.data.get(LOVELACE_DATA)
             if ll is None:
+                _LOGGER.warning(
+                    "Connectivity Monitor: Lovelace not available yet, retrying in 10 s. "
+                    "If this persists, add %s as a Lovelace resource manually",
+                    card_url,
+                )
+                async_call_later(hass, 10, _register_lovelace_resource)
                 return
             resources = getattr(ll, "resources", None)
             if resources is None:
+                _LOGGER.warning(
+                    "Connectivity Monitor: Lovelace resources not available. "
+                    "Please add %s as a Lovelace resource manually",
+                    card_url,
+                )
                 return
             await resources.async_load()
             current_resources = list(resources.async_items())
@@ -209,9 +221,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             )
         except (ImportError, AttributeError, TypeError) as err:
             _LOGGER.warning(
-                "Connectivity Monitor: could not register Lovelace resource: %s", err
+                "Connectivity Monitor: could not register Lovelace resource: %s. "
+                "Please add %s as a Lovelace resource manually",
+                err,
+                card_url,
             )
 
+    # Try immediately (covers hot-reloads where homeassistant_started already fired)
+    hass.async_create_task(_register_lovelace_resource())
+    # Also try on first startup (lovelace storage may not be ready until then)
     hass.bus.async_listen_once("homeassistant_started", _register_lovelace_resource)
 
     return True
