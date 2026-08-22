@@ -4,6 +4,9 @@ on:
   release:
     types: [published]
 
+permissions:
+  contents: write  # Gives the action permission to attach files to your release
+
 jobs:
   release:
     name: Prepare Release Asset
@@ -14,7 +17,7 @@ jobs:
 
       - name: Create ZIP archive
         run: |
-          zip -r connectivity_monitor.zip custom_components
+          cd custom_components && zip -r ../connectivity_monitor.zip connectivity_monitor
 
       - name: Upload ZIP to GitHub Release
         uses: softprops/action-gh-release@v2
