@@ -17,7 +17,7 @@ jobs:
 
       - name: Create ZIP archive
         run: |
-          cd custom_components && zip -r ../connectivity_monitor.zip connectivity_monitor
+          cd custom_components/connectivity_monitor && zip -r ../../connectivity_monitor.zip .
 
       - name: Upload ZIP to GitHub Release
         uses: softprops/action-gh-release@v2
