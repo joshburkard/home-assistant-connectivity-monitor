@@ -1,0 +1,28 @@
+#!/bin/sh
+# Ensure manifest.json and changelog.md are updated whenever source files are staged.
+
+MANIFEST="custom_components/connectivity_monitor/manifest.json"
+CHANGELOG="changelog.md"
+
+# Source file patterns that require manifest/changelog updates
+STAGED_SOURCE=$(git diff --cached --name-only | grep -E '\.(py|js|json)$' | grep -v "$MANIFEST" || true)
+
+if [ -z "$STAGED_SOURCE" ]; then
+  exit 0
+fi
+
+MISSING=""
+
+if ! git diff --cached --name-only | grep -qF "$MANIFEST"; then
+  MISSING="$MISSING\n  - $MANIFEST"
+fi
+
+if ! git diff --cached --name-only | grep -qF "$CHANGELOG"; then
+  MISSING="$MISSING\n  - $CHANGELOG"
+fi
+
+if [ -n "$MISSING" ]; then
+  MISSING_INLINE=$(printf "%b" "$MISSING" | tr '\n' ' ' | sed 's/^  - //' | sed 's/  - /, /g')
+  echo "pre-commit blocked: missing updates to $MISSING_INLINE — update manifest.json version + changelog.md entry. Bypass: git commit --no-verify"
+  exit 1
+fi
