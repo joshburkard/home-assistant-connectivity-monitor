@@ -9,6 +9,6 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/joshburkard/home-assistant-connectivity-monitor/issues",
   "quality_scale": "bronze",
-  "requirements": ["icmplib==3.0", "dnspython==2.8.0"],
+  "requirements": ["icmplib==3.0.4", "dnspython==2.8.0"],
   "version": "1.0.00005"
 }
