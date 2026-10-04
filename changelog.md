@@ -2,6 +2,8 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 1.0.00007 | 04/10/2026 | updating hass fest workflow |
+| 1.0.00006 | 02/10/2026 | updating hass fest workflow |
 | 1.0.00005 | 02/10/2026 | updating hass fest workflow |
 | 1.0.00001 | 17/08/2026 | added release workflow to create download zip |
 | 1.0.00000 | 31/07/2026 | first public release in HACS |
