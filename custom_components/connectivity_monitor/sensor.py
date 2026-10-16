@@ -493,6 +493,23 @@ class AlertHandler:
             unsubscribe()
         self._callbacks.clear()
 
+    @callback
+    def async_move_alerts(self, old_entity_id: str, new_entity_id: str) -> None:
+        """Move alert tracking to a renamed entity without resetting its timers."""
+        if (unsubscribe := self._callbacks.pop(old_entity_id, None)) is not None:
+            unsubscribe()
+        for data in (
+            self._targets,
+            self._last_disconnected,
+            self._notified,
+            self._action_fired,
+            self._recovering_since,
+        ):
+            if old_entity_id in data:
+                data[new_entity_id] = data.pop(old_entity_id)
+        if new_entity_id in self._targets:
+            self._async_track_entity(new_entity_id, self._targets[new_entity_id])
+
     async def _check_alerts(self) -> None:  # noqa: C901
         """Check all monitored entities for alerts."""
         current_time = datetime.now()
@@ -767,92 +784,92 @@ class AlertHandler:
             self._callbacks[entity_id]()
             self._callbacks.pop(entity_id)
 
-        async def async_handle_state_change(event) -> None:
-            """Handle state changes for an entity."""
-            # Handle both real events and our simulated initial state check
-            if hasattr(event, "data"):
-                new_state = event.data.get("new_state")
-                old_state = event.data.get("old_state")
-            else:
-                new_state = event.get("new_state")
-                old_state = event.get("old_state")
-
-            if new_state is None:
-                return
-
-            current_time = datetime.now()
-            is_zha = target.get(CONF_PROTOCOL) == PROTOCOL_ZHA
-            is_inactive = target.get(CONF_PROTOCOL) in (
-                PROTOCOL_ZHA,
-                PROTOCOL_MATTER,
-                PROTOCOL_ESPHOME,
-                PROTOCOL_BLUETOOTH,
-            )
-            problem_states = (
-                ["Inactive"]
-                if is_inactive
-                else ["Disconnected", "Not Connected", "Partially Connected"]
-            )
-            recovery_state = "Active" if is_inactive else "Connected"
-            if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
-                identifier = target.get(CONF_MATTER_NODE_ID, target[CONF_HOST])
-            elif target.get(CONF_PROTOCOL) == PROTOCOL_ESPHOME:
-                identifier = target.get(CONF_ESPHOME_DEVICE_ID, target[CONF_HOST])
-            elif target.get(CONF_PROTOCOL) == PROTOCOL_BLUETOOTH:
-                identifier = target.get(CONF_BLUETOOTH_ADDRESS, target[CONF_HOST])
-            elif is_zha:
-                identifier = target.get(CONF_ZHA_IEEE, target[CONF_HOST])
-            else:
-                identifier = target[CONF_HOST]
-            device_name = target.get("device_name", identifier)
-
-            # Device has entered a problem state
-            if new_state.state in problem_states:
-                # Cancel any in-progress recovery confirmation.
-                self._recovering_since.pop(entity_id, None)
-                # Only start timing if we weren't already in a problem state
-                if entity_id not in self._last_disconnected or (
-                    old_state and old_state.state not in problem_states
-                ):
-                    self._last_disconnected[entity_id] = current_time
-                    self._notified[entity_id] = False
-                    self._action_fired[entity_id] = False
-                    _LOGGER.info(
-                        "Connectivity Monitor: started tracking %s as %s since %s",
-                        device_name,
-                        new_state.state,
-                        current_time.strftime("%H:%M:%S"),
-                    )
-
-            # Device has recovered
-            elif new_state.state == recovery_state:
-                if entity_id in self._last_disconnected:
-                    # Start the recovery confirmation window.  The actual
-                    # recovery processing (notifications, actions, cleanup) is
-                    # handled by _check_alerts once the recovery has been
-                    # stable for ≥ 60 s, so that brief false-positive "Connected"
-                    # polls don't reset the alert delay countdown.
-                    if entity_id not in self._recovering_since:
-                        self._recovering_since[entity_id] = datetime.now()
-                        _LOGGER.info(
-                            "Connectivity Monitor: %s entered recovery state — confirming in 60s",
-                            device_name,
-                        )
-
-        @callback
-        def state_change_callback(event):
-            """Callback wrapper for state change handler."""
-            self.hass.async_create_task(async_handle_state_change(event))
-
-        # Set up state tracking
-        self._callbacks[entity_id] = async_track_state_change_event(
-            self.hass, [entity_id], state_change_callback
-        )
+        self._async_track_entity(entity_id, target)
 
         # Check initial state
         state = self.hass.states.get(entity_id)
         if state and state.state != STATE_UNKNOWN:
-            await async_handle_state_change({"new_state": state, "old_state": None})
+            await self._async_handle_state_change(
+                entity_id, target, {"new_state": state, "old_state": None}
+            )
+
+    @callback
+    def _async_track_entity(self, entity_id: str, target: dict) -> None:
+        """Track state changes for one alert-enabled entity."""
+
+        @callback
+        def state_change_callback(event):
+            """Handle state changes for an entity."""
+            self.hass.async_create_task(
+                self._async_handle_state_change(entity_id, target, event)
+            )
+
+        self._callbacks[entity_id] = async_track_state_change_event(
+            self.hass, [entity_id], state_change_callback
+        )
+
+    async def _async_handle_state_change(
+        self, entity_id: str, target: dict, event
+    ) -> None:
+        """Handle a state change for an alert-enabled entity."""
+        if hasattr(event, "data"):
+            new_state = event.data.get("new_state")
+            old_state = event.data.get("old_state")
+        else:
+            new_state = event.get("new_state")
+            old_state = event.get("old_state")
+
+        if new_state is None:
+            return
+
+        current_time = datetime.now()
+        is_zha = target.get(CONF_PROTOCOL) == PROTOCOL_ZHA
+        is_inactive = target.get(CONF_PROTOCOL) in (
+            PROTOCOL_ZHA,
+            PROTOCOL_MATTER,
+            PROTOCOL_ESPHOME,
+            PROTOCOL_BLUETOOTH,
+        )
+        problem_states = (
+            ["Inactive"]
+            if is_inactive
+            else ["Disconnected", "Not Connected", "Partially Connected"]
+        )
+        recovery_state = "Active" if is_inactive else "Connected"
+        if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
+            identifier = target.get(CONF_MATTER_NODE_ID, target[CONF_HOST])
+        elif target.get(CONF_PROTOCOL) == PROTOCOL_ESPHOME:
+            identifier = target.get(CONF_ESPHOME_DEVICE_ID, target[CONF_HOST])
+        elif target.get(CONF_PROTOCOL) == PROTOCOL_BLUETOOTH:
+            identifier = target.get(CONF_BLUETOOTH_ADDRESS, target[CONF_HOST])
+        elif is_zha:
+            identifier = target.get(CONF_ZHA_IEEE, target[CONF_HOST])
+        else:
+            identifier = target[CONF_HOST]
+        device_name = target.get("device_name", identifier)
+
+        if new_state.state in problem_states:
+            self._recovering_since.pop(entity_id, None)
+            if entity_id not in self._last_disconnected or (
+                old_state and old_state.state not in problem_states
+            ):
+                self._last_disconnected[entity_id] = current_time
+                self._notified[entity_id] = False
+                self._action_fired[entity_id] = False
+                _LOGGER.info(
+                    "Connectivity Monitor: started tracking %s as %s since %s",
+                    device_name,
+                    new_state.state,
+                    current_time.strftime("%H:%M:%S"),
+                )
+        elif new_state.state == recovery_state:
+            if entity_id in self._last_disconnected:
+                if entity_id not in self._recovering_since:
+                    self._recovering_since[entity_id] = datetime.now()
+                    _LOGGER.info(
+                        "Connectivity Monitor: %s entered recovery state — confirming in 60s",
+                        device_name,
+                    )
 
 
 class ConnectivityMonitorEntity(CoordinatorEntity["ConnectivityMonitorCoordinator"]):  # pylint: disable=hass-enforce-class-module
@@ -873,6 +890,36 @@ class ConnectivityMonitorEntity(CoordinatorEntity["ConnectivityMonitorCoordinato
     def _target_data_for(self, target: dict) -> dict[str, Any]:
         """Return the last known payload for another target in the same entry."""
         return self.coordinator.get_target_data(target)
+
+
+class AlertingConnectivityEntity(ConnectivityMonitorEntity):
+    """Shared lifecycle handling for entities with configured alerts."""
+
+    def __init__(
+        self, coordinator: ConnectivityMonitorCoordinator, target: dict
+    ) -> None:
+        """Initialize the alerting entity."""
+        super().__init__(coordinator, target)
+        self._alert_handler: AlertHandler | None = None
+
+    def _alerts_configured(self) -> bool:
+        """Return whether this entity has alert behavior configured."""
+        return self._alert_handler is not None and bool(
+            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
+        )
+
+    async def async_added_to_hass(self) -> None:
+        """Set up alerts once the final entity_id is known."""
+        await super().async_added_to_hass()
+        if self._alerts_configured():
+            await self._alert_handler.async_setup_alerts(self.entity_id, self.target)
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        """Move alert tracking when Home Assistant changes this entity's ID."""
+        super().async_entity_id_changed(old_entity_id)
+        if self._alerts_configured():
+            self._alert_handler.async_move_alerts(old_entity_id, self.entity_id)
 
 
 class ConnectivitySensor(ConnectivityMonitorEntity, SensorEntity):
@@ -994,7 +1041,7 @@ class ConnectivitySensor(ConnectivityMonitorEntity, SensorEntity):
         return "mdi:lan-connect"
 
 
-class OverviewSensor(ConnectivityMonitorEntity, SensorEntity):
+class OverviewSensor(AlertingConnectivityEntity, SensorEntity):
     """Overview sensor showing combined status."""
 
     def __init__(
@@ -1006,7 +1053,6 @@ class OverviewSensor(ConnectivityMonitorEntity, SensorEntity):
         """Initialize the overview sensor."""
         super().__init__(coordinator, target)
         self._device_targets = device_targets
-        self._alert_handler: AlertHandler | None = None
         self._attr_has_entity_name = True
         self._attr_available = True
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1059,15 +1105,6 @@ class OverviewSensor(ConnectivityMonitorEntity, SensorEntity):
             sw_version=VERSION,
             connections=connections,
         )
-
-    async def async_added_to_hass(self) -> None:
-        """Set up alerts once the final entity_id is known."""
-        await super().async_added_to_hass()
-        alert_handler = getattr(self, "_alert_handler", None)
-        if alert_handler and (
-            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
-        ):
-            await alert_handler.async_setup_alerts(self.entity_id, self.target)
 
     @property
     def native_value(self) -> str:
@@ -1261,7 +1298,7 @@ class ADOverviewSensor(ConnectivityMonitorEntity, SensorEntity):
         return "mdi:domain-off"
 
 
-class ZHASensor(ConnectivityMonitorEntity, SensorEntity):
+class ZHASensor(AlertingConnectivityEntity, SensorEntity):
     """Sensor for a ZHA (ZigBee) device activity status based on last_seen."""
 
     def __init__(
@@ -1269,7 +1306,6 @@ class ZHASensor(ConnectivityMonitorEntity, SensorEntity):
     ) -> None:
         """Initialize the ZHA sensor."""
         super().__init__(coordinator, target)
-        self._alert_handler: AlertHandler | None = None
         self._attr_has_entity_name = True
         self._attr_available = True
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1342,17 +1378,7 @@ class ZHASensor(ConnectivityMonitorEntity, SensorEntity):
             return "mdi:zigbee"
         return "mdi:lan-disconnect"
 
-    async def async_added_to_hass(self) -> None:
-        """Set up alerts after entity_id is finalised by HA registry."""
-        await super().async_added_to_hass()
-        alert_handler = getattr(self, "_alert_handler", None)
-        if alert_handler and (
-            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
-        ):
-            await alert_handler.async_setup_alerts(self.entity_id, self.target)
-
-
-class MatterSensor(ConnectivityMonitorEntity, SensorEntity):
+class MatterSensor(AlertingConnectivityEntity, SensorEntity):
     """Sensor for a Matter device activity status based on entity availability."""
 
     def __init__(
@@ -1360,7 +1386,6 @@ class MatterSensor(ConnectivityMonitorEntity, SensorEntity):
     ) -> None:
         """Initialize the Matter sensor."""
         super().__init__(coordinator, target)
-        self._alert_handler: AlertHandler | None = None
         self._attr_has_entity_name = True
         self._attr_available = True
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1424,17 +1449,7 @@ class MatterSensor(ConnectivityMonitorEntity, SensorEntity):
             return "mdi:chip"
         return "mdi:lan-disconnect"
 
-    async def async_added_to_hass(self) -> None:
-        """Set up alerts after entity_id is finalised by HA registry."""
-        await super().async_added_to_hass()
-        alert_handler = getattr(self, "_alert_handler", None)
-        if alert_handler and (
-            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
-        ):
-            await alert_handler.async_setup_alerts(self.entity_id, self.target)
-
-
-class ESPHomeSensor(ConnectivityMonitorEntity, SensorEntity):
+class ESPHomeSensor(AlertingConnectivityEntity, SensorEntity):
     """Sensor for an ESPHome device activity status based on entity availability."""
 
     def __init__(
@@ -1442,7 +1457,6 @@ class ESPHomeSensor(ConnectivityMonitorEntity, SensorEntity):
     ) -> None:
         """Initialize the ESPHome sensor."""
         super().__init__(coordinator, target)
-        self._alert_handler: AlertHandler | None = None
         self._attr_has_entity_name = True
         self._attr_available = True
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1525,17 +1539,7 @@ class ESPHomeSensor(ConnectivityMonitorEntity, SensorEntity):
             return "mdi:chip"
         return "mdi:lan-disconnect"
 
-    async def async_added_to_hass(self) -> None:
-        """Set up alerts after entity_id is finalised by HA registry."""
-        await super().async_added_to_hass()
-        alert_handler = getattr(self, "_alert_handler", None)
-        if alert_handler and (
-            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
-        ):
-            await alert_handler.async_setup_alerts(self.entity_id, self.target)
-
-
-class BluetoothSensor(ConnectivityMonitorEntity, SensorEntity):
+class BluetoothSensor(AlertingConnectivityEntity, SensorEntity):
     """Sensor for a Bluetooth device activity status based on entity availability."""
 
     def __init__(
@@ -1543,7 +1547,6 @@ class BluetoothSensor(ConnectivityMonitorEntity, SensorEntity):
     ) -> None:
         """Initialize the Bluetooth sensor."""
         super().__init__(coordinator, target)
-        self._alert_handler: AlertHandler | None = None
         self._attr_has_entity_name = True
         self._attr_available = True
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1622,15 +1625,6 @@ class BluetoothSensor(ConnectivityMonitorEntity, SensorEntity):
         if self.target_data and self.target_data.get("active"):
             return "mdi:bluetooth"
         return "mdi:bluetooth-off"
-
-    async def async_added_to_hass(self) -> None:
-        """Set up alerts after entity_id is finalised by HA registry."""
-        await super().async_added_to_hass()
-        alert_handler = getattr(self, "_alert_handler", None)
-        if alert_handler and (
-            self.target.get(CONF_ALERT_GROUP) or self.target.get(CONF_ALERT_ACTION)
-        ):
-            await alert_handler.async_setup_alerts(self.entity_id, self.target)
 
 
 # ---------------------------------------------------------------------------
