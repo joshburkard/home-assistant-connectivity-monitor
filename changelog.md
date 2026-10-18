@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 1.0.00009 | 18/10/2026 | fix ESPHome connectivity status and device metadata; improve alert tracking, network cache refresh, stable sensor IDs, and summary entity retention |
 | 1.0.00008 | 16/10/2026 | preserve alert tracking when entity IDs change in place |
 | 1.0.00007 | 04/10/2026 | updating hass fest workflow |
 | 1.0.00006 | 02/10/2026 | updating hass fest workflow |

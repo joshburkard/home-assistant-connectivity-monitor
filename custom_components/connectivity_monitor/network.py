@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import socket
+import time
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -28,6 +29,7 @@ except ImportError:
     HAVE_DNS = False
 
 _LOGGER = logging.getLogger(__name__)
+_HOST_CACHE_TTL = 60
 
 
 class NetworkProbe:
@@ -39,18 +41,26 @@ class NetworkProbe:
         self._dns_server = dns_server
         self._resolver = None
         self._resolved_ips: dict[str, str | None] = {}
+        self._resolved_at: dict[str, float] = {}
         self._mac_addresses: dict[str, str | None] = {}
+        self._mac_address_at: dict[str, float] = {}
         self._icmp_privileged: dict[str, bool | None] = {}
         self._icmp_import_failed = False
 
     async def async_prepare_host(self, host: str) -> None:
         """Populate cached resolution and MAC data for a network host."""
-        if host not in self._resolved_ips:
+        now = time.monotonic()
+        if now - self._resolved_at.get(host, float("-inf")) >= _HOST_CACHE_TTL:
             self._resolved_ips[host] = await self._resolve_host(host)
+            self._resolved_at[host] = now
 
         resolved_ip = self._resolved_ips.get(host)
-        if resolved_ip and resolved_ip not in self._mac_addresses:
+        if resolved_ip and (
+            now - self._mac_address_at.get(resolved_ip, float("-inf"))
+            >= _HOST_CACHE_TTL
+        ):
             self._mac_addresses[resolved_ip] = await self._get_mac_address(resolved_ip)
+            self._mac_address_at[resolved_ip] = now
 
     async def async_update_target(self, target: dict[str, Any]) -> dict[str, Any]:
         """Probe a TCP/UDP/ICMP network target."""

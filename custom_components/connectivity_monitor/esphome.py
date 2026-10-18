@@ -156,9 +156,9 @@ async def async_get_esphome_device_active(
 ) -> bool | None:
     """Return True if the ESPHome device has at least one available entity.
 
-    A device is considered Active when one or more of its entities report a
-    state other than 'unavailable'.  Returns None when the device cannot be
-    found at all.
+    A dedicated connectivity entity takes precedence over other entity states.
+    Otherwise, any known and available entity indicates that the node is
+    connected. Returns None when the device cannot be found at all.
 
     device_id is either a config-entry entry_id (primary) or an identifier
     value (fallback).
@@ -215,11 +215,21 @@ async def async_get_esphome_device_active(
             )
             return None
 
-        # Device is active when any entity is in a non-unavailable state
+        connectivity_states = []
+        has_available_entity = False
         for entity_entry in entities:
             state = hass.states.get(entity_entry.entity_id)
-            if state is not None and state.state != "unavailable":
-                return True
+            if state is None:
+                continue
+            if state.attributes.get("device_class") == "connectivity":
+                connectivity_states.append(state.state)
+            elif state.state not in ("unknown", "unavailable"):
+                has_available_entity = True
+
+        if connectivity_states:
+            return "on" in connectivity_states
+        if has_available_entity:
+            return True
 
     except (AttributeError, RuntimeError) as err:
         _LOGGER.warning(

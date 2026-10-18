@@ -150,6 +150,16 @@ async def async_setup_entry(  # noqa: C901
                     ad_targets.append(target)
 
                 sensor = ConnectivitySensor(coordinator, target)
+                existing_sensor = next(
+                    (
+                        existing
+                        for existing in existing_entities
+                        if existing.entity_id == sensor.entity_id
+                    ),
+                    None,
+                )
+                if existing_sensor:
+                    sensor._attr_unique_id = existing_sensor.unique_id
                 entities.append(sensor)
                 if sensor.unique_id is not None:
                     new_unique_ids.add(sensor.unique_id)
@@ -275,43 +285,6 @@ async def async_setup_entry(  # noqa: C901
             bt_sensor._alert_handler = alert_handler  # noqa: SLF001
         except Exception:
             _LOGGER.exception("Error creating Bluetooth sensor for target %s", target)
-
-    # Remove old entities
-    for entity in existing_entities:
-        if entity.unique_id not in new_unique_ids:
-            _LOGGER.debug(
-                "Removing old entity: %s (unique_id: %s)",
-                entity.entity_id,
-                entity.unique_id,
-            )
-            entity_registry.async_remove(entity.entity_id)
-
-    # Remove orphaned devices — any device that references this config entry
-    # but has no remaining entities belonging to it. This covers both our own
-    # DOMAIN devices (network monitors) and shared devices (ZHA/Matter) where
-    # our diagnostic sensor was removed but the config-entry link was not.
-    device_registry = dr.async_get(hass)
-    for device_entry in list(device_registry.devices.values()):
-        if entry.entry_id not in device_entry.config_entries:
-            continue
-        entry_entity_ids = {
-            e.entity_id
-            for e in er.async_entries_for_device(entity_registry, device_entry.id)
-            if e.config_entry_id == entry.entry_id
-        }
-        if not entry_entity_ids:
-            _LOGGER.debug(
-                "Removing orphaned device: %s (%s)", device_entry.name, device_entry.id
-            )
-            if device_entry.config_entries == {entry.entry_id}:
-                # Only our integration owns this device — safe to delete entirely.
-                device_registry.async_remove_device(device_entry.id)
-            else:
-                # Device is shared with another integration (e.g. ZHA/Matter).
-                # Only remove our association so the device remains intact.
-                device_registry.async_update_device(
-                    device_entry.id, remove_config_entry_id=entry.entry_id
-                )
 
     # ------------------------------------------------------------------
     # Build summary / count sensors (one per type × status, no device)
@@ -441,6 +414,37 @@ async def async_setup_entry(  # noqa: C901
 
     entities.extend(count_entities)
 
+    # Prune only after every desired entity, including summaries, is known.
+    for entity in existing_entities:
+        if entity.unique_id not in new_unique_ids:
+            _LOGGER.debug(
+                "Removing old entity: %s (unique_id: %s)",
+                entity.entity_id,
+                entity.unique_id,
+            )
+            entity_registry.async_remove(entity.entity_id)
+
+    # Remove devices that no longer have entities belonging to this entry.
+    device_registry = dr.async_get(hass)
+    for device_entry in list(device_registry.devices.values()):
+        if entry.entry_id not in device_entry.config_entries:
+            continue
+        entry_entity_ids = {
+            e.entity_id
+            for e in er.async_entries_for_device(entity_registry, device_entry.id)
+            if e.config_entry_id == entry.entry_id
+        }
+        if not entry_entity_ids:
+            _LOGGER.debug(
+                "Removing orphaned device: %s (%s)", device_entry.name, device_entry.id
+            )
+            if device_entry.config_entries == {entry.entry_id}:
+                device_registry.async_remove_device(device_entry.id)
+            else:
+                device_registry.async_update_device(
+                    device_entry.id, remove_config_entry_id=entry.entry_id
+                )
+
     _LOGGER.debug(
         "Final entities to be added: %s",
         [{"entity_id": e.entity_id, "unique_id": e.unique_id} for e in entities],
@@ -529,9 +533,15 @@ class AlertHandler:
                 PROTOCOL_BLUETOOTH,
             )
             problem_states_chk = (
-                ["Inactive"]
+                ["Inactive", "Unknown", STATE_UNKNOWN]
                 if is_inactive_chk
-                else ["Disconnected", "Not Connected", "Partially Connected"]
+                else [
+                    "Disconnected",
+                    "Not Connected",
+                    "Partially Connected",
+                    "Unknown",
+                    STATE_UNKNOWN,
+                ]
             )
             cur_state = self.hass.states.get(eid)
             if cur_state and cur_state.state in problem_states_chk:
@@ -569,9 +579,15 @@ class AlertHandler:
                 PROTOCOL_BLUETOOTH,
             )
             problem_states = (
-                ["Inactive"]
+                ["Inactive", "Unknown", STATE_UNKNOWN]
                 if is_inactive
-                else ["Disconnected", "Not Connected", "Partially Connected"]
+                else [
+                    "Disconnected",
+                    "Not Connected",
+                    "Partially Connected",
+                    "Unknown",
+                    STATE_UNKNOWN,
+                ]
             )
             recovery_state = "Active" if is_inactive else "Connected"
             if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
@@ -788,7 +804,7 @@ class AlertHandler:
 
         # Check initial state
         state = self.hass.states.get(entity_id)
-        if state and state.state != STATE_UNKNOWN:
+        if state:
             await self._async_handle_state_change(
                 entity_id, target, {"new_state": state, "old_state": None}
             )
@@ -831,9 +847,15 @@ class AlertHandler:
             PROTOCOL_BLUETOOTH,
         )
         problem_states = (
-            ["Inactive"]
+            ["Inactive", "Unknown", STATE_UNKNOWN]
             if is_inactive
-            else ["Disconnected", "Not Connected", "Partially Connected"]
+            else [
+                "Disconnected",
+                "Not Connected",
+                "Partially Connected",
+                "Unknown",
+                STATE_UNKNOWN,
+            ]
         )
         recovery_state = "Active" if is_inactive else "Connected"
         if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
@@ -961,14 +983,8 @@ class ConnectivitySensor(ConnectivityMonitorEntity, SensorEntity):
         mac_address = coord_data.get("mac_address")
         ip_address = coord_data.get("resolved_ip")
 
-        # Set unique_id with prefix
-        base_id = None
-        if mac_address:
-            base_id = mac_address.lower().replace(":", "")
-        elif ip_address:
-            base_id = ip_address.replace(".", "_")
-        else:
-            base_id = target[CONF_HOST].replace(".", "_")
+        # Hostnames remain stable when DNS or ARP data changes.
+        base_id = target[CONF_HOST].lower().replace(".", "_").replace(":", "_")
 
         self._attr_unique_id = f"connectivity_{base_id}_{target[CONF_PROTOCOL]}_{target.get(CONF_PORT, 'ping')}"
 
@@ -1496,6 +1512,10 @@ class ESPHomeSensor(AlertingConnectivityEntity, SensorEntity):
 
         device_info_kwargs: dict = {
             "identifiers": {("esphome", esphome_identifier)},
+            "name": device_name,
+            "manufacturer": target.get("manufacturer"),
+            "model": target.get("model"),
+            "sw_version": target.get("sw_version"),
         }
         if mac_address:
             device_info_kwargs["connections"] = {(CONNECTION_NETWORK_MAC, mac_address)}
