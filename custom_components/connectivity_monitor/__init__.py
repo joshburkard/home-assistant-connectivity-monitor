@@ -11,7 +11,6 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -184,12 +183,16 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
             ll = hass.data.get(LOVELACE_DATA)
             if ll is None:
-                _LOGGER.warning(
-                    "Connectivity Monitor: Lovelace not available yet, retrying in 10 s. "
-                    "If this persists, add %s as a Lovelace resource manually",
-                    card_url,
-                )
-                async_call_later(hass, 10, _register_lovelace_resource)
+                if hass.is_running:
+                    _LOGGER.warning(
+                        "Connectivity Monitor: Lovelace is not available yet. "
+                        "If this persists, add %s as a Lovelace resource manually",
+                        card_url,
+                    )
+                else:
+                    _LOGGER.debug(
+                        "Connectivity Monitor: Lovelace will be checked when Home Assistant starts"
+                    )
                 return
             resources = getattr(ll, "resources", None)
             if resources is None:

@@ -77,6 +77,23 @@ def _alerting_network_config_entry(
     )
 
 
+@pytest.fixture(autouse=True)
+def prevent_network_polling_in_alert_tests(
+    request: pytest.FixtureRequest,
+) -> None:
+    """Keep alert timer tests isolated from scheduled network probes."""
+    if not request.node.name.startswith("test_alert_handler_"):
+        return
+
+    patcher = patch(
+        "custom_components.connectivity_monitor.coordinator."
+        "ConnectivityMonitorCoordinator._async_update_data",
+        AsyncMock(return_value={}),
+    )
+    patcher.start()
+    request.addfinalizer(patcher.stop)
+
+
 async def test_network_sensors_expose_expected_state(
     hass: HomeAssistant,
     network_config_entry: MockConfigEntry,

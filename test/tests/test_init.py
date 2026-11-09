@@ -76,12 +76,11 @@ async def test_load_unload_entry(
     assert hass.states.get("sensor.connectivity_monitor_router_icmp") is not None
 
     alert_handler = network_config_entry.runtime_data.alert_handler
-    alert_handler.async_cleanup = AsyncMock()
+    with patch.object(alert_handler, "async_cleanup", wraps=alert_handler.async_cleanup) as cleanup:
+        assert await hass.config_entries.async_unload(network_config_entry.entry_id)
+        await hass.async_block_till_done()
 
-    assert await hass.config_entries.async_unload(network_config_entry.entry_id)
-    await hass.async_block_till_done()
-
-    assert alert_handler.async_cleanup.await_count == 1
+    cleanup.assert_awaited_once()
     assert network_config_entry.state is ConfigEntryState.NOT_LOADED
     assert not hasattr(network_config_entry, "runtime_data")
 
