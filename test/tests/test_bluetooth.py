@@ -92,7 +92,7 @@ def test_merge_device_rssi_none_base() -> None:
 async def test_get_bluetooth_devices_empty(hass: HomeAssistant) -> None:
     """Returns empty list when no Bluetooth discoveries and no registry devices."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -112,7 +112,7 @@ async def test_get_bluetooth_devices_from_service_info(hass: HomeAssistant) -> N
     service_info.service_data = {}
 
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[service_info],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -129,7 +129,7 @@ async def test_get_bluetooth_devices_skips_empty_address(hass: HomeAssistant) ->
     service_info.address = None
 
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[service_info],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -162,7 +162,7 @@ async def test_get_bluetooth_devices_merges_registry(hass: HomeAssistant) -> Non
     )
 
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[service_info],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -185,7 +185,7 @@ async def test_get_bluetooth_devices_registry_only(hass: HomeAssistant) -> None:
     )
 
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -196,7 +196,7 @@ async def test_get_bluetooth_devices_registry_only(hass: HomeAssistant) -> None:
 async def test_get_bluetooth_devices_error(hass: HomeAssistant) -> None:
     """When bluetooth raises AttributeError we return empty list."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         side_effect=AttributeError("boom"),
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -227,7 +227,7 @@ async def test_get_bluetooth_devices_sorted(hass: HomeAssistant) -> None:
     svc_a.service_data = {}
 
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_discovered_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_discovered_service_info",
         return_value=[svc_z, svc_a],
     ):
         devices = await async_get_bluetooth_devices(hass)
@@ -249,11 +249,11 @@ async def test_get_bluetooth_device_active_found_non_connectable(
 
     with (
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+            "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
             return_value=mock_service_info,
         ),
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_address_present",
+            "custom_components.connectivity_monitor.bluetooth._async_address_present",
             return_value=True,
         ),
     ):
@@ -275,11 +275,11 @@ async def test_get_bluetooth_device_active_found_connectable(
 
     with (
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+            "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
             side_effect=_last_service_info,
         ),
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_address_present",
+            "custom_components.connectivity_monitor.bluetooth._async_address_present",
             return_value=True,
         ),
     ):
@@ -291,7 +291,7 @@ async def test_get_bluetooth_device_active_found_connectable(
 async def test_get_bluetooth_device_active_not_found(hass: HomeAssistant) -> None:
     """Returns None when service info is not found for the address."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
         return_value=None,
     ):
         result = await async_get_bluetooth_device_active(hass, "AA:BB:CC:DD:EE:FF")
@@ -302,7 +302,7 @@ async def test_get_bluetooth_device_active_not_found(hass: HomeAssistant) -> Non
 async def test_get_bluetooth_device_active_error(hass: HomeAssistant) -> None:
     """Returns None and logs warning on AttributeError."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
         side_effect=AttributeError("boom"),
     ):
         result = await async_get_bluetooth_device_active(hass, "AA:BB:CC:DD:EE:FF")
@@ -313,7 +313,7 @@ async def test_get_bluetooth_device_active_error(hass: HomeAssistant) -> None:
 async def test_get_bluetooth_device_active_runtime_error(hass: HomeAssistant) -> None:
     """Returns None and logs warning on RuntimeError."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
         side_effect=RuntimeError("boom"),
     ):
         result = await async_get_bluetooth_device_active(hass, "AA:BB:CC:DD:EE:FF")
@@ -329,7 +329,7 @@ async def test_get_bluetooth_device_active_runtime_error(hass: HomeAssistant) ->
 async def test_get_bluetooth_device_details_not_found(hass: HomeAssistant) -> None:
     """Returns inactive dict when no service info available."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
         return_value=None,
     ):
         result = await async_get_bluetooth_device_details(hass, "AA:BB:CC:DD:EE:FF")
@@ -353,11 +353,11 @@ async def test_get_bluetooth_device_details_found(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+            "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
             return_value=svc,
         ),
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_address_present",
+            "custom_components.connectivity_monitor.bluetooth._async_address_present",
             return_value=True,
         ),
     ):
@@ -392,11 +392,11 @@ async def test_get_bluetooth_device_details_connectable_fallback(
 
     with (
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+            "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
             side_effect=_last_service_info,
         ),
         patch(
-            "custom_components.connectivity_monitor.bluetooth.bluetooth.async_address_present",
+            "custom_components.connectivity_monitor.bluetooth._async_address_present",
             return_value=False,
         ),
     ):
@@ -409,7 +409,7 @@ async def test_get_bluetooth_device_details_connectable_fallback(
 async def test_get_bluetooth_device_details_error(hass: HomeAssistant) -> None:
     """Returns inactive dict on AttributeError."""
     with patch(
-        "custom_components.connectivity_monitor.bluetooth.bluetooth.async_last_service_info",
+        "custom_components.connectivity_monitor.bluetooth._async_last_service_info",
         side_effect=AttributeError("err"),
     ):
         result = await async_get_bluetooth_device_details(hass, "AA:BB:CC:DD:EE:FF")

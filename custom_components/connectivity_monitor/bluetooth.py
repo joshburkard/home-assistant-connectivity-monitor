@@ -3,14 +3,39 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-from homeassistant.components import bluetooth
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
 _LOGGER = logging.getLogger(__name__)
 
 BLUETOOTH_DOMAIN = "bluetooth"
+
+
+def _async_discovered_service_info(hass: HomeAssistant, *, connectable: bool) -> Any:
+    """Fetch Bluetooth discoveries without importing the platform at module load."""
+    from homeassistant.components import bluetooth
+
+    return bluetooth.async_discovered_service_info(hass, connectable=connectable)
+
+
+def _async_last_service_info(
+    hass: HomeAssistant, address: str, *, connectable: bool
+) -> Any:
+    """Fetch the latest Bluetooth advertisement on demand."""
+    from homeassistant.components import bluetooth
+
+    return bluetooth.async_last_service_info(hass, address, connectable=connectable)
+
+
+def _async_address_present(
+    hass: HomeAssistant, address: str, *, connectable: bool
+) -> bool:
+    """Check Bluetooth presence on demand."""
+    from homeassistant.components import bluetooth
+
+    return bluetooth.async_address_present(hass, address, connectable=connectable)
 
 
 def _normalize_address(address: str | None) -> str:
@@ -45,7 +70,7 @@ async def async_get_bluetooth_devices(hass: HomeAssistant) -> list[dict]:
 
     try:
         for connectable in (False, True):
-            for service_info in bluetooth.async_discovered_service_info(
+            for service_info in _async_discovered_service_info(
                 hass, connectable=connectable
             ):
                 bt_address = _normalize_address(getattr(service_info, "address", None))
@@ -113,17 +138,17 @@ async def async_get_bluetooth_device_active(
     """
     try:
         normalized = _normalize_address(bt_address)
-        service_info = bluetooth.async_last_service_info(
+        service_info = _async_last_service_info(
             hass, normalized, connectable=False
         )
         if service_info is None:
-            service_info = bluetooth.async_last_service_info(
+            service_info = _async_last_service_info(
                 hass, normalized, connectable=True
             )
         if service_info is None:
             return None
 
-        return bluetooth.async_address_present(hass, normalized, connectable=False)
+        return _async_address_present(hass, normalized, connectable=False)
 
     except (AttributeError, RuntimeError) as err:
         _LOGGER.warning(
@@ -140,11 +165,11 @@ async def async_get_bluetooth_device_details(
     """Return latest Bluetooth advertisement details for an address."""
     try:
         normalized = _normalize_address(bt_address)
-        service_info = bluetooth.async_last_service_info(
+        service_info = _async_last_service_info(
             hass, normalized, connectable=False
         )
         if service_info is None:
-            service_info = bluetooth.async_last_service_info(
+            service_info = _async_last_service_info(
                 hass, normalized, connectable=True
             )
         if service_info is None:
@@ -154,7 +179,7 @@ async def async_get_bluetooth_device_details(
             }
 
         return {
-            "active": bluetooth.async_address_present(
+            "active": _async_address_present(
                 hass, normalized, connectable=False
             ),
             "device_found": True,
