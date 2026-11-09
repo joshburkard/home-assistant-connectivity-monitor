@@ -115,7 +115,7 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
                 "ESPHome config-entry scan found no loaded devices; scanning "
                 "the device registry"
             )
-            for device_entry in device_registry.async_get_devices():
+            for device_entry in device_registry.devices:
                 esphome_identifier = next(
                     (
                         str(identifier[1])
@@ -184,6 +184,8 @@ async def async_refresh_target_metadata(
         if target.get(CONF_PROTOCOL) == PROTOCOL_ESPHOME:
             device_id = str(target.get(CONF_ESPHOME_DEVICE_ID, ""))
             device = devices_by_id.get(device_id)
+            if device is None and target.get("esphome_identifier"):
+                device = devices_by_id.get(str(target["esphome_identifier"]))
             if device:
                 for metadata_key in ("manufacturer", "model", "sw_version"):
                     value = device.get(metadata_key)

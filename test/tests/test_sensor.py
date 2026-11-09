@@ -451,7 +451,7 @@ async def test_protocol_specific_sensors_expose_expected_state(
     elif protocol == PROTOCOL_ESPHOME:
         device = next(
             device
-            for device in dr.async_get(hass).async_get_devices()
+            for device in dr.async_get(hass).devices
             if ("esphome", "node-1") in device.identifiers
         )
         assert device.name == "Garage Node"

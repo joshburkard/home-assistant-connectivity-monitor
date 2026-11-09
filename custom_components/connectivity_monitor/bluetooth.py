@@ -98,7 +98,7 @@ async def async_get_bluetooth_devices(hass: HomeAssistant) -> list[dict]:
                 )
 
         device_registry = dr.async_get(hass)
-        for device_entry in device_registry.async_get_devices():
+        for device_entry in device_registry.devices:
             for identifier in device_entry.identifiers:
                 if identifier[0] == BLUETOOTH_DOMAIN:
                     bt_address = _normalize_address(str(identifier[1]))

@@ -1917,7 +1917,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # target[CONF_HOST] in DeviceInfo — works regardless of whether
                 # the identifier uses a MAC or the host string.
                 old_device_ids = set()
-                for device_entry in device_registry.async_get_devices():
+                for device_entry in device_registry.devices:
                     if device_entry.hw_version == old_host and any(
                         i[0] == DOMAIN for i in device_entry.identifiers
                     ):
@@ -2115,7 +2115,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # target[CONF_HOST] in DeviceInfo for every network device — this
             # works regardless of whether the identifier uses a MAC or the host.
             device_ids = set()
-            for device_entry in device_registry.async_get_devices():
+            for device_entry in device_registry.devices:
                 if device_entry.hw_version == device_host and any(
                     i[0] == DOMAIN for i in device_entry.identifiers
                 ):

@@ -184,7 +184,7 @@ async def test_async_test_tcp_success(hass: HomeAssistant) -> None:
     """Returns latency when TCP connection succeeds."""
     probe = _make_probe(hass)
 
-    mock_writer = AsyncMock()
+    mock_writer = MagicMock()
     mock_writer.wait_closed = AsyncMock()
 
     with patch(
@@ -237,7 +237,9 @@ async def test_async_test_udp_success(hass: HomeAssistant) -> None:
     ) as mock_socket_cls:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        hass.async_add_executor_job = AsyncMock(return_value=None)
+        hass.async_add_executor_job = AsyncMock(
+            side_effect=lambda func, *args: func(*args)
+        )
 
         latency = await probe._async_test_udp("10.0.0.1", 53)
 

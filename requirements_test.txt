@@ -13,8 +13,11 @@ dbus-fast==5.0.22
 habluetooth==7.1.2
 aiousbwatcher==1.1.2
 serialx==1.11.0
+mutagen==1.48.1
+ha-ffmpeg==3.2.2
+pymicro-vad==1.0.1
+pyspeex-noise==1.0.2
 esphome-dashboard-api==1.4.0
 aioesphomeapi==46.6.0
 bleak-esphome==4.0.0
-esphome-dashboard-api==1.4.0
-bleak-esphome==4.0.0
+hassil==3.12.1
