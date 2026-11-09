@@ -34,6 +34,7 @@ from .coordinator import (
     ConnectivityMonitorCoordinator,
     ConnectivityMonitorRuntimeData,
 )
+from .esphome import async_refresh_target_metadata
 from .sensor import AlertHandler
 
 _LOGGER = logging.getLogger(__name__)
@@ -239,6 +240,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConnectivityMonitorConfigEntry
 ) -> bool:
     """Set up Connectivity Monitor from a config entry."""
+    await async_refresh_target_metadata(hass, entry)
     alert_handler = AlertHandler(hass)
     coordinator = ConnectivityMonitorCoordinator(
         hass,

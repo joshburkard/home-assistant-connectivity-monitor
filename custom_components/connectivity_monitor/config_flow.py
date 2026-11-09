@@ -112,6 +112,7 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._esphome_selected_name: str | None = None
         self._esphome_selected_model: str | None = None
         self._esphome_selected_manufacturer: str | None = None
+        self._esphome_selected_sw_version: str | None = None
         self._esphome_selected_identifier: str | None = None
         self._esphome_selected_mac: str | None = None
         # Bluetooth device selection state
@@ -641,6 +642,7 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             self._esphome_selected_model = matched.get("model")
             self._esphome_selected_manufacturer = matched.get("manufacturer")
+            self._esphome_selected_sw_version = matched.get("sw_version")
             self._esphome_selected_identifier = matched.get("esphome_identifier")
             self._esphome_selected_mac = matched.get("esphome_mac")
             return await self.async_step_esphome_configure()
@@ -692,6 +694,8 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 new_target["model"] = self._esphome_selected_model
             if self._esphome_selected_manufacturer:
                 new_target["manufacturer"] = self._esphome_selected_manufacturer
+            if self._esphome_selected_sw_version:
+                new_target["sw_version"] = self._esphome_selected_sw_version
 
             targets = list(self._data.get(CONF_TARGETS, []))
             targets.append(new_target)

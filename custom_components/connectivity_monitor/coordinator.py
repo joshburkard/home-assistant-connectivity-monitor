@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from importlib import import_module
 import logging
 from typing import Any
 
@@ -13,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .bluetooth import async_get_bluetooth_device_details
 from .const import (
     CONF_BLUETOOTH_ADDRESS,
     CONF_ESPHOME_DEVICE_ID,
@@ -33,14 +33,12 @@ from .const import (
     PROTOCOL_UDP,
     PROTOCOL_ZHA,
 )
+from .esphome import async_get_esphome_device_active
+from .matter import async_get_matter_device_active
 from .network import NetworkProbe
+from .zha import async_get_zha_device_last_seen
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _sensor_platform():
-    """Import the sensor platform lazily to avoid a circular import."""
-    return import_module(".sensor", __package__)
 
 
 @dataclass(slots=True)
@@ -168,13 +166,9 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
 
     async def _async_update_zha_target(self, target: dict) -> dict[str, Any]:
         """Fetch last_seen and activity state for a ZHA device."""
-        sensor_platform = _sensor_platform()
-
         ieee = target[CONF_ZHA_IEEE]
         timeout_minutes = target.get(CONF_INACTIVE_TIMEOUT, DEFAULT_INACTIVE_TIMEOUT)
-        last_seen = await sensor_platform.async_get_zha_device_last_seen(
-            self.hass, ieee
-        )
+        last_seen = await async_get_zha_device_last_seen(self.hass, ieee)
 
         active = False
         minutes_ago = None
@@ -191,9 +185,7 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
 
     async def _async_update_matter_target(self, target: dict) -> dict[str, Any]:
         """Fetch activity state for a Matter device."""
-        sensor_platform = _sensor_platform()
-
-        active = await sensor_platform.async_get_matter_device_active(
+        active = await async_get_matter_device_active(
             self.hass, target[CONF_MATTER_NODE_ID]
         )
         return {
@@ -203,9 +195,7 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
 
     async def _async_update_esphome_target(self, target: dict) -> dict[str, Any]:
         """Fetch activity state for an ESPHome device."""
-        sensor_platform = _sensor_platform()
-
-        active = await sensor_platform.async_get_esphome_device_active(
+        active = await async_get_esphome_device_active(
             self.hass, target[CONF_ESPHOME_DEVICE_ID]
         )
         return {
@@ -215,8 +205,6 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
 
     async def _async_update_bluetooth_target(self, target: dict) -> dict[str, Any]:
         """Fetch activity details for a Bluetooth device."""
-        sensor_platform = _sensor_platform()
-
-        return await sensor_platform.async_get_bluetooth_device_details(
+        return await async_get_bluetooth_device_details(
             self.hass, target[CONF_BLUETOOTH_ADDRESS]
         )

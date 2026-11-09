@@ -8,7 +8,7 @@ import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.const import STATE_UNKNOWN, EntityCategory
+from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
@@ -68,6 +68,47 @@ async_get_zha_device_last_seen = zha_helpers.async_get_zha_device_last_seen
 _LOGGER = logging.getLogger(__name__)
 
 
+def _existing_network_entity(
+    existing_entities: list,
+    device_ids: set[str],
+    unique_id: str | None,
+    role_suffix: str,
+) -> Any | None:
+    """Find a registered network sensor by identity or device role."""
+    if unique_id is None:
+        return None
+    return next(
+        (entity for entity in existing_entities if entity.unique_id == unique_id),
+        None,
+    ) or next(
+        (
+            entity
+            for entity in existing_entities
+            if entity.device_id in device_ids and entity.unique_id.endswith(role_suffix)
+        ),
+        None,
+    )
+
+
+def _problem_states_for_target(target: dict) -> set[str]:
+    """Return states that should start or continue alert tracking."""
+    if target.get(CONF_PROTOCOL) in (
+        PROTOCOL_ZHA,
+        PROTOCOL_MATTER,
+        PROTOCOL_ESPHOME,
+        PROTOCOL_BLUETOOTH,
+    ):
+        return {"Inactive", "Unknown", STATE_UNKNOWN, STATE_UNAVAILABLE}
+    return {
+        "Disconnected",
+        "Not Connected",
+        "Partially Connected",
+        "Unknown",
+        STATE_UNKNOWN,
+        STATE_UNAVAILABLE,
+    }
+
+
 async def async_setup_entry(  # noqa: C901
     hass: HomeAssistant,
     entry: ConnectivityMonitorConfigEntry,
@@ -112,6 +153,15 @@ async def async_setup_entry(  # noqa: C901
             host_targets[host] = []
         host_targets[host].append(target)
 
+    device_registry = dr.async_get(hass)
+    network_device_ids_by_host: dict[str, set[str]] = {}
+    for device_entry in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
+        host = device_entry.hw_version
+        if host in host_targets and device_entry.model == "Network Monitor":
+            network_device_ids_by_host.setdefault(host, set()).add(device_entry.id)
+
     _LOGGER.debug(
         "Grouped targets by host: %s",
         {
@@ -150,13 +200,12 @@ async def async_setup_entry(  # noqa: C901
                     ad_targets.append(target)
 
                 sensor = ConnectivitySensor(coordinator, target)
-                existing_sensor = next(
-                    (
-                        existing
-                        for existing in existing_entities
-                        if existing.entity_id == sensor.entity_id
-                    ),
-                    None,
+                existing_sensor = _existing_network_entity(
+                    existing_entities,
+                    network_device_ids_by_host.get(host, set()),
+                    sensor.unique_id,
+                    f"_{target[CONF_PROTOCOL]}_"
+                    f"{target.get(CONF_PORT, 'ping')}",
                 )
                 if existing_sensor:
                     sensor._attr_unique_id = existing_sensor.unique_id
@@ -182,6 +231,14 @@ async def async_setup_entry(  # noqa: C901
 
                 _LOGGER.debug("Creating overview sensor for device: %s", device_name)
                 overview = OverviewSensor(coordinator, first_target, host_target_list)
+                existing_overview = _existing_network_entity(
+                    existing_entities,
+                    network_device_ids_by_host.get(host, set()),
+                    overview.unique_id,
+                    "_overall",
+                )
+                if existing_overview:
+                    overview._attr_unique_id = existing_overview.unique_id
                 entities.append(overview)
                 if overview.unique_id is not None:
                     new_unique_ids.add(overview.unique_id)
@@ -204,6 +261,14 @@ async def async_setup_entry(  # noqa: C901
                     ad_overview = ADOverviewSensor(
                         coordinator, first_target, ad_targets
                     )
+                    existing_ad_overview = _existing_network_entity(
+                        existing_entities,
+                        network_device_ids_by_host.get(host, set()),
+                        ad_overview.unique_id,
+                        "_ad",
+                    )
+                    if existing_ad_overview:
+                        ad_overview._attr_unique_id = existing_ad_overview.unique_id
                     entities.append(ad_overview)
                     if ad_overview.unique_id is not None:
                         new_unique_ids.add(ad_overview.unique_id)
@@ -425,8 +490,9 @@ async def async_setup_entry(  # noqa: C901
             entity_registry.async_remove(entity.entity_id)
 
     # Remove devices that no longer have entities belonging to this entry.
-    device_registry = dr.async_get(hass)
-    for device_entry in list(device_registry.devices.values()):
+    for device_entry in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
         if entry.entry_id not in device_entry.config_entries:
             continue
         entry_entity_ids = {
@@ -526,23 +592,7 @@ class AlertHandler:
             if eid in self._last_disconnected:
                 continue
             is_zha_chk = tgt.get(CONF_PROTOCOL) == PROTOCOL_ZHA
-            is_inactive_chk = tgt.get(CONF_PROTOCOL) in (
-                PROTOCOL_ZHA,
-                PROTOCOL_MATTER,
-                PROTOCOL_ESPHOME,
-                PROTOCOL_BLUETOOTH,
-            )
-            problem_states_chk = (
-                ["Inactive", "Unknown", STATE_UNKNOWN]
-                if is_inactive_chk
-                else [
-                    "Disconnected",
-                    "Not Connected",
-                    "Partially Connected",
-                    "Unknown",
-                    STATE_UNKNOWN,
-                ]
-            )
+            problem_states_chk = _problem_states_for_target(tgt)
             cur_state = self.hass.states.get(eid)
             if cur_state and cur_state.state in problem_states_chk:
                 self._last_disconnected[eid] = current_time
@@ -578,17 +628,7 @@ class AlertHandler:
                 PROTOCOL_ESPHOME,
                 PROTOCOL_BLUETOOTH,
             )
-            problem_states = (
-                ["Inactive", "Unknown", STATE_UNKNOWN]
-                if is_inactive
-                else [
-                    "Disconnected",
-                    "Not Connected",
-                    "Partially Connected",
-                    "Unknown",
-                    STATE_UNKNOWN,
-                ]
-            )
+            problem_states = _problem_states_for_target(target)
             recovery_state = "Active" if is_inactive else "Connected"
             if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
                 identifier = target.get(CONF_MATTER_NODE_ID, target[CONF_HOST])
@@ -846,17 +886,7 @@ class AlertHandler:
             PROTOCOL_ESPHOME,
             PROTOCOL_BLUETOOTH,
         )
-        problem_states = (
-            ["Inactive", "Unknown", STATE_UNKNOWN]
-            if is_inactive
-            else [
-                "Disconnected",
-                "Not Connected",
-                "Partially Connected",
-                "Unknown",
-                STATE_UNKNOWN,
-            ]
-        )
+        problem_states = _problem_states_for_target(target)
         recovery_state = "Active" if is_inactive else "Connected"
         if target.get(CONF_PROTOCOL) == PROTOCOL_MATTER:
             identifier = target.get(CONF_MATTER_NODE_ID, target[CONF_HOST])
@@ -1081,20 +1111,13 @@ class OverviewSensor(AlertingConnectivityEntity, SensorEntity):
         self._attr_name = "Overall Status"
         self.entity_id = f"sensor.connectivity_monitor_{safe_device_name}_overall"
 
-        # Get data from coordinator
+        # Keep identity tied to the configured host, not volatile discovery data.
+        base_id = target[CONF_HOST].lower().replace(".", "_").replace(":", "_")
+        self._attr_unique_id = f"connectivity_{base_id}_overall"
+
         coord_data = coordinator.get_target_data(target)
         mac_address = coord_data.get("mac_address")
         ip_address = coord_data.get("resolved_ip")
-
-        # Set unique_id with prefix
-        if mac_address:
-            base_id = mac_address.lower().replace(":", "")
-        elif ip_address:
-            base_id = ip_address.replace(".", "_")
-        else:
-            base_id = target[CONF_HOST].replace(".", "_")
-
-        self._attr_unique_id = f"connectivity_{base_id}_overall"
 
         # Set up device info
         connections = set()
@@ -1214,21 +1237,13 @@ class ADOverviewSensor(ConnectivityMonitorEntity, SensorEntity):
         self._attr_name = "Active Directory"
         self.entity_id = f"sensor.connectivity_monitor_{safe_device_name}_ad"
 
-        # Get data from coordinator
+        # Keep identity tied to the configured host, not volatile discovery data.
+        base_id = target[CONF_HOST].lower().replace(".", "_").replace(":", "_")
+        self._attr_unique_id = f"connectivity_{base_id}_ad"
+
         coord_data = coordinator.get_target_data(target)
         mac_address = coord_data.get("mac_address")
         ip_address = coord_data.get("resolved_ip")
-
-        # Set unique_id with prefix
-        base_id = None
-        if mac_address:
-            base_id = mac_address.lower().replace(":", "")
-        elif ip_address:
-            base_id = ip_address.replace(".", "_")
-        else:
-            base_id = target[CONF_HOST].replace(".", "_")
-
-        self._attr_unique_id = f"connectivity_{base_id}_ad"
 
         # Set up device info
         connections = set()
@@ -1513,10 +1528,10 @@ class ESPHomeSensor(AlertingConnectivityEntity, SensorEntity):
         device_info_kwargs: dict = {
             "identifiers": {("esphome", esphome_identifier)},
             "name": device_name,
-            "manufacturer": target.get("manufacturer"),
-            "model": target.get("model"),
-            "sw_version": target.get("sw_version"),
         }
+        for metadata_key in ("manufacturer", "model", "sw_version"):
+            if target.get(metadata_key):
+                device_info_kwargs[metadata_key] = target[metadata_key]
         if mac_address:
             device_info_kwargs["connections"] = {(CONNECTION_NETWORK_MAC, mac_address)}
 

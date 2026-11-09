@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 
-from homeassistant.config_entries import ConfigEntryState
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
+
+from .const import CONF_ESPHOME_DEVICE_ID, CONF_PROTOCOL, CONF_TARGETS, PROTOCOL_ESPHOME
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,7 +42,9 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
 
             # Find the device that lists this config entry
             device_entry = None
-            for de in device_registry.devices.values():
+            for de in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            ):
                 if entry.entry_id in de.config_entries:
                     # Prefer the device that also has an 'esphome' identifier
                     # when there are sub-devices (e.g. multi-device firmware).
@@ -105,50 +109,107 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
                 }
             )
 
-        # ── Fallback: identifier-based scan (catches older HA layouts) ────────
+        # ── Include registry data for entries that are not loaded yet ─────────
         if not devices:
             _LOGGER.debug(
-                "ESPHome config-entry scan found 0 devices — falling back to "
-                "device-registry identifier scan"
+                "ESPHome config-entry scan found no loaded devices; checking "
+                "all ESPHome config entries"
             )
-            for device_entry in device_registry.devices.values():
-                for identifier in device_entry.identifiers:
-                    if identifier[0] == ESPHOME_DOMAIN:
-                        if device_entry.id in seen_device_registry_ids:
-                            break
-                        seen_device_registry_ids.add(device_entry.id)
-                        device_id = str(identifier[1])
-                        mac_address = next(
-                            (
-                                str(con[1])
-                                for con in device_entry.connections
-                                if con[0] == "mac"
-                            ),
-                            None,
-                        )
-                        devices.append(
-                            {
-                                "device_id": device_id,
-                                "entry_id": None,
-                                "esphome_identifier": device_id,
-                                "esphome_mac": mac_address,
-                                "name": (
-                                    device_entry.name_by_user
-                                    or device_entry.name
-                                    or device_id
-                                ),
-                                "model": device_entry.model,
-                                "manufacturer": device_entry.manufacturer,
-                                "sw_version": device_entry.sw_version,
-                            }
-                        )
-                        break
+        for entry in hass.config_entries.async_entries(ESPHOME_DOMAIN):
+            for device_entry in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            ):
+                esphome_identifier = next(
+                    (
+                        str(identifier[1])
+                        for identifier in device_entry.identifiers
+                        if identifier[0] == ESPHOME_DOMAIN
+                    ),
+                    None,
+                )
+                if (
+                    esphome_identifier is None
+                    or device_entry.id in seen_device_registry_ids
+                ):
+                    continue
+                seen_device_registry_ids.add(device_entry.id)
+                mac_address = next(
+                    (
+                        str(connection[1])
+                        for connection in device_entry.connections
+                        if connection[0] == "mac"
+                    ),
+                    None,
+                )
+                devices.append(
+                    {
+                        "device_id": entry.entry_id,
+                        "entry_id": entry.entry_id,
+                        "esphome_identifier": esphome_identifier,
+                        "esphome_mac": mac_address,
+                        "name": (
+                            device_entry.name_by_user
+                            or device_entry.name
+                            or entry.entry_id
+                        ),
+                        "model": device_entry.model,
+                        "manufacturer": device_entry.manufacturer,
+                        "sw_version": device_entry.sw_version,
+                    }
+                )
 
     except (AttributeError, RuntimeError) as err:
         _LOGGER.warning("Could not enumerate ESPHome devices: %s", err)
 
     _LOGGER.debug("ESPHome devices found: %d", len(devices))
     return devices
+
+
+async def async_refresh_target_metadata(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> bool:
+    """Refresh stored ESPHome metadata from the current device registry."""
+    targets = config_entry.data.get(CONF_TARGETS, [])
+    if not any(target.get(CONF_PROTOCOL) == PROTOCOL_ESPHOME for target in targets):
+        return False
+
+    devices = await async_get_esphome_devices(hass)
+    devices_by_id: dict[str, dict] = {}
+    for device in devices:
+        for device_key in (
+            device.get("device_id"),
+            device.get("entry_id"),
+            device.get("esphome_identifier"),
+        ):
+            if device_key:
+                devices_by_id[str(device_key)] = device
+
+    updated_targets = []
+    changed = False
+    for target in targets:
+        updated_target = dict(target)
+        if target.get(CONF_PROTOCOL) == PROTOCOL_ESPHOME:
+            device_id = str(target.get(CONF_ESPHOME_DEVICE_ID, ""))
+            device = devices_by_id.get(device_id)
+            if device:
+                for metadata_key in ("manufacturer", "model", "sw_version"):
+                    value = device.get(metadata_key)
+                    if value and updated_target.get(metadata_key) != value:
+                        updated_target[metadata_key] = value
+                        changed = True
+        updated_targets.append(updated_target)
+
+    if changed:
+        hass.config_entries.async_update_entry(
+            config_entry,
+            data={**config_entry.data, CONF_TARGETS: updated_targets},
+        )
+        _LOGGER.info(
+            "Connectivity Monitor: refreshed ESPHome metadata for config entry %s",
+            config_entry.entry_id,
+        )
+
+    return changed
 
 
 async def async_get_esphome_device_active(
@@ -171,7 +232,9 @@ async def async_get_esphome_device_active(
         device_entry = None
         entry = hass.config_entries.async_get_entry(device_id)
         if entry is not None and entry.domain == ESPHOME_DOMAIN:
-            for de in device_registry.devices.values():
+            for de in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            ):
                 if entry.entry_id in de.config_entries:
                     has_esphome_id = any(
                         idf[0] == ESPHOME_DOMAIN for idf in de.identifiers
@@ -183,16 +246,9 @@ async def async_get_esphome_device_active(
 
         # ── Fallback: identifier-based lookup ─────────────────────────────────
         if device_entry is None:
-            for de in device_registry.devices.values():
-                for identifier in de.identifiers:
-                    if (
-                        identifier[0] == ESPHOME_DOMAIN
-                        and str(identifier[1]) == device_id
-                    ):
-                        device_entry = de
-                        break
-                if device_entry is not None:
-                    break
+            device_entry = device_registry.async_get_device(
+                identifiers={(ESPHOME_DOMAIN, device_id)}
+            )
 
         if device_entry is None:
             _LOGGER.debug("ESPHome device not found for device_id '%s'", device_id)
