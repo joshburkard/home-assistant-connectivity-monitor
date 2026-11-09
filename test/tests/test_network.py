@@ -215,8 +215,8 @@ async def test_async_test_tcp_timeout(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "custom_components.connectivity_monitor.network.asyncio.wait_for",
-        side_effect=TimeoutError(),
+        "custom_components.connectivity_monitor.network.asyncio.open_connection",
+        new=AsyncMock(side_effect=TimeoutError()),
     ):
         latency = await probe._async_test_tcp("10.0.0.1", 80)
 

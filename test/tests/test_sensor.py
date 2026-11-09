@@ -77,23 +77,6 @@ def _alerting_network_config_entry(
     )
 
 
-@pytest.fixture(autouse=True)
-def prevent_network_polling_in_alert_tests(
-    request: pytest.FixtureRequest,
-) -> None:
-    """Keep alert timer tests isolated from scheduled network probes."""
-    if not request.node.name.startswith("test_alert_handler_"):
-        return
-
-    patcher = patch(
-        "custom_components.connectivity_monitor.coordinator."
-        "ConnectivityMonitorCoordinator._async_update_data",
-        AsyncMock(return_value={}),
-    )
-    patcher.start()
-    request.addfinalizer(patcher.stop)
-
-
 async def test_network_sensors_expose_expected_state(
     hass: HomeAssistant,
     network_config_entry: MockConfigEntry,
@@ -685,6 +668,7 @@ async def test_alert_handler_triggers_notification_and_action_after_delays(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+    await entry.runtime_data.coordinator.async_shutdown()
     entity_id = "sensor.connectivity_monitor_router_overall"
     hass.states.async_set(entity_id, "Disconnected")
     await hass.async_block_till_done()
@@ -794,6 +778,7 @@ async def test_alert_handler_sends_recovery_after_confirmed_reconnect(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+    await entry.runtime_data.coordinator.async_shutdown()
     entity_id = "sensor.connectivity_monitor_router_overall"
     hass.states.async_set(entity_id, "Disconnected")
     await hass.async_block_till_done()
@@ -853,6 +838,7 @@ async def test_alert_handler_cancels_recovery_when_device_flaps(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+    await entry.runtime_data.coordinator.async_shutdown()
     entity_id = "sensor.connectivity_monitor_router_overall"
     hass.states.async_set(entity_id, "Disconnected")
     await hass.async_block_till_done()
@@ -924,6 +910,7 @@ async def test_alert_handler_preserves_timer_when_entity_id_changes(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+    await entry.runtime_data.coordinator.async_shutdown()
     old_entity_id = "sensor.connectivity_monitor_router_overall"
     new_entity_id = "sensor.router_overall"
     hass.states.async_set(old_entity_id, "Disconnected")
@@ -996,6 +983,7 @@ async def test_alert_handler_does_not_repeat_notification_or_action(
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
+    await entry.runtime_data.coordinator.async_shutdown()
     entity_id = "sensor.connectivity_monitor_router_overall"
     hass.states.async_set(entity_id, "Disconnected")
     await hass.async_block_till_done()
