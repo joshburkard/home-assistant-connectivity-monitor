@@ -237,14 +237,14 @@ async def test_async_test_udp_success(hass: HomeAssistant) -> None:
     ) as mock_socket_cls:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
-        hass.async_add_executor_job = AsyncMock(
-            side_effect=lambda func, *args: func(*args)
-        )
+        mock_executor = AsyncMock(return_value=None)
+        hass.async_add_executor_job = mock_executor
 
         latency = await probe._async_test_udp("10.0.0.1", 53)
 
     assert latency is not None
     assert latency >= 0
+    mock_executor.assert_awaited_once_with(mock_sock.connect, ("10.0.0.1", 53))
 
 
 async def test_async_test_udp_oserror(hass: HomeAssistant) -> None:

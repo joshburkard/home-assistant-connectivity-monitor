@@ -21,3 +21,5 @@ esphome-dashboard-api==1.4.0
 aioesphomeapi==46.6.0
 bleak-esphome==4.0.0
 hassil==3.12.1
+gazetteer-matcher==1.1.0
+home-assistant-intents==2026.10.6
