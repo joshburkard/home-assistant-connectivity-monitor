@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 from custom_components.connectivity_monitor.const import (
     CONF_HOST,
@@ -382,34 +382,27 @@ async def test_async_icmp_ping_oserror(hass: HomeAssistant) -> None:
 
 
 async def test_get_mac_address_found(hass: HomeAssistant) -> None:
-    """Returns MAC address parsed from ARP output."""
+    """Returns a MAC address parsed from the kernel ARP table."""
     probe = _make_probe(hass)
-
-    mock_proc = AsyncMock()
-    mock_proc.communicate = AsyncMock(
-        return_value=(b"? (192.168.1.1) at aa:bb:cc:dd:ee:ff [ether]", b"")
+    arp_table = mock_open(
+        read_data=(
+            "IP address HW type Flags HW address Mask Device\n"
+            "192.168.1.1 0x1 0x2 aa:bb:cc:dd:ee:ff * eth0\n"
+        )
     )
 
-    with patch(
-        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
-        return_value=mock_proc,
-    ):
+    with patch("builtins.open", arp_table):
         mac = await probe._get_mac_address("192.168.1.1")
 
     assert mac == "AA:BB:CC:DD:EE:FF"
 
 
 async def test_get_mac_address_not_found(hass: HomeAssistant) -> None:
-    """Returns None when ARP output has no MAC address pattern."""
+    """Returns None when the ARP table has no entry for the IP."""
     probe = _make_probe(hass)
+    arp_table = mock_open(read_data="IP address HW type Flags HW address Mask Device\n")
 
-    mock_proc = AsyncMock()
-    mock_proc.communicate = AsyncMock(return_value=(b"192.168.1.1 -- no entry", b""))
-
-    with patch(
-        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
-        return_value=mock_proc,
-    ):
+    with patch("builtins.open", arp_table):
         mac = await probe._get_mac_address("192.168.1.1")
 
     assert mac is None
@@ -419,10 +412,7 @@ async def test_get_mac_address_oserror(hass: HomeAssistant) -> None:
     """Returns None on OSError."""
     probe = _make_probe(hass)
 
-    with patch(
-        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
-        side_effect=OSError("subprocess failed"),
-    ):
+    with patch("builtins.open", side_effect=OSError("ARP table unavailable")):
         mac = await probe._get_mac_address("192.168.1.1")
 
     assert mac is None

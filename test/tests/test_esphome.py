@@ -105,21 +105,23 @@ async def test_get_esphome_devices_no_device_for_entry(hass: HomeAssistant) -> N
 
 
 async def test_get_esphome_devices_deduplication(hass: HomeAssistant) -> None:
-    """Same device registry entry linked to two config entries is not doubled."""
+    """A duplicate device lookup result is returned only once."""
     entry1 = _create_esphome_config_entry(hass, entry_id="e1", title="ESP-A")
-    entry2 = _create_esphome_config_entry(hass, entry_id="e2", title="ESP-A-dup")
+    _create_esphome_config_entry(hass, entry_id="e2", title="ESP-A-dup")
 
     device_registry = dr.async_get(hass)
-    # Create device once; add second config entry to it
     dev = device_registry.async_get_or_create(
         config_entry_id=entry1.entry_id,
         identifiers={(ESPHOME_DOMAIN, "esp_dup")},
         name="Shared ESP",
     )
-    device_registry.async_update_device(dev.id, add_config_entry_id=entry2.entry_id)
 
-    devices = await async_get_esphome_devices(hass)
-    # Should appear only once
+    with patch(
+        "custom_components.connectivity_monitor.esphome.dr.async_entries_for_config_entry",
+        return_value=[dev],
+    ):
+        devices = await async_get_esphome_devices(hass)
+
     assert len(devices) == 1
 
 

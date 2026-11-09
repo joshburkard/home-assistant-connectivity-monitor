@@ -228,10 +228,10 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
                 card_url,
             )
 
-    # Try immediately (covers hot-reloads where homeassistant_started already fired)
-    hass.async_create_task(_register_lovelace_resource())
-    # Also try on first startup (lovelace storage may not be ready until then)
-    hass.bus.async_listen_once("homeassistant_started", _register_lovelace_resource)
+    if hass.is_running:
+        hass.async_create_task(_register_lovelace_resource())
+    else:
+        hass.bus.async_listen_once("homeassistant_started", _register_lovelace_resource)
 
     return True
 

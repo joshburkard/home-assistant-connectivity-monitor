@@ -1917,7 +1917,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 # target[CONF_HOST] in DeviceInfo — works regardless of whether
                 # the identifier uses a MAC or the host string.
                 old_device_ids = set()
-                for device_entry in device_registry.devices.values():
+                for device_entry in device_registry.async_get_devices():
                     if device_entry.hw_version == old_host and any(
                         i[0] == DOMAIN for i in device_entry.identifiers
                     ):
@@ -2115,7 +2115,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             # target[CONF_HOST] in DeviceInfo for every network device — this
             # works regardless of whether the identifier uses a MAC or the host.
             device_ids = set()
-            for device_entry in device_registry.devices.values():
+            for device_entry in device_registry.async_get_devices():
                 if device_entry.hw_version == device_host and any(
                     i[0] == DOMAIN for i in device_entry.identifiers
                 ):
@@ -2568,10 +2568,9 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         entry_id = self.config_entry.entry_id
 
         removed = []
-        for device_entry in list(device_registry.devices.values()):
-            # Only consider devices that list our config entry
-            if entry_id not in device_entry.config_entries:
-                continue
+        for device_entry in dr.async_entries_for_config_entry(
+            device_registry, entry_id
+        ):
             # Check whether any entity still belongs to our config entry
             entry_entities = [
                 e
@@ -2580,14 +2579,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             ]
             if not entry_entities:
                 removed.append(device_entry.name or device_entry.id)
-                if device_entry.config_entries == {entry_id}:
-                    # Exclusively ours — delete the device entirely
-                    device_registry.async_remove_device(device_entry.id)
-                else:
-                    # Shared with another integration — only remove our association
-                    device_registry.async_update_device(
-                        device_entry.id, remove_config_entry_id=entry_id
-                    )
+                device_registry.async_remove_device(device_entry.id)
 
         if removed:
             _LOGGER.info(

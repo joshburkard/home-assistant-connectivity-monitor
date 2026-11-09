@@ -45,7 +45,7 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
             for de in dr.async_entries_for_config_entry(
                 device_registry, entry.entry_id
             ):
-                if entry.entry_id in de.config_entries:
+                if de.config_entry_id == entry.entry_id:
                     # Prefer the device that also has an 'esphome' identifier
                     # when there are sub-devices (e.g. multi-device firmware).
                     has_esphome_id = any(
@@ -109,16 +109,13 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
                 }
             )
 
-        # ── Include registry data for entries that are not loaded yet ─────────
+        # ── Fallback for devices without a loaded ESPHome entry ───────────────
         if not devices:
             _LOGGER.debug(
-                "ESPHome config-entry scan found no loaded devices; checking "
-                "all ESPHome config entries"
+                "ESPHome config-entry scan found no loaded devices; scanning "
+                "the device registry"
             )
-        for entry in hass.config_entries.async_entries(ESPHOME_DOMAIN):
-            for device_entry in dr.async_entries_for_config_entry(
-                device_registry, entry.entry_id
-            ):
+            for device_entry in device_registry.async_get_devices():
                 esphome_identifier = next(
                     (
                         str(identifier[1])
@@ -143,15 +140,11 @@ async def async_get_esphome_devices(hass: HomeAssistant) -> list[dict]:
                 )
                 devices.append(
                     {
-                        "device_id": entry.entry_id,
-                        "entry_id": entry.entry_id,
+                        "device_id": device_entry.config_entry_id,
+                        "entry_id": None,
                         "esphome_identifier": esphome_identifier,
                         "esphome_mac": mac_address,
-                        "name": (
-                            device_entry.name_by_user
-                            or device_entry.name
-                            or entry.entry_id
-                        ),
+                        "name": device_entry.name_by_user or device_entry.name,
                         "model": device_entry.model,
                         "manufacturer": device_entry.manufacturer,
                         "sw_version": device_entry.sw_version,
@@ -235,7 +228,7 @@ async def async_get_esphome_device_active(
             for de in dr.async_entries_for_config_entry(
                 device_registry, entry.entry_id
             ):
-                if entry.entry_id in de.config_entries:
+                if de.config_entry_id == entry.entry_id:
                     has_esphome_id = any(
                         idf[0] == ESPHOME_DOMAIN for idf in de.identifiers
                     )
@@ -246,9 +239,10 @@ async def async_get_esphome_device_active(
 
         # ── Fallback: identifier-based lookup ─────────────────────────────────
         if device_entry is None:
-            device_entry = device_registry.async_get_device(
+            devices = device_registry.async_get_devices(
                 identifiers={(ESPHOME_DOMAIN, device_id)}
             )
+            device_entry = devices[0] if devices else None
 
         if device_entry is None:
             _LOGGER.debug("ESPHome device not found for device_id '%s'", device_id)

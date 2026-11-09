@@ -22,7 +22,7 @@ async def async_get_matter_devices(hass: HomeAssistant) -> list[dict]:
     devices: list[dict] = []
     try:
         device_registry = dr.async_get(hass)
-        for device_entry in device_registry.devices.values():
+        for device_entry in device_registry.async_get_devices():
             for identifier in device_entry.identifiers:
                 if identifier[0] == MATTER_DOMAIN:
                     node_id = str(identifier[1])
@@ -64,7 +64,7 @@ async def async_get_matter_device_active(
 
         # Locate the device entry for this node_id
         device_entry = None
-        for de in device_registry.devices.values():
+        for de in device_registry.async_get_devices():
             for identifier in de.identifiers:
                 if identifier[0] == MATTER_DOMAIN and str(identifier[1]) == node_id:
                     device_entry = de

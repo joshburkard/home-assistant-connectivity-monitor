@@ -89,7 +89,7 @@ def _build_registry_name_map(hass: HomeAssistant) -> dict[str, str]:
     name_map: dict[str, str] = {}
     try:
         device_registry = dr.async_get(hass)
-        for device_entry in device_registry.devices.values():
+        for device_entry in device_registry.async_get_devices():
             for identifier in device_entry.identifiers:
                 if identifier[0] == ZHA_DOMAIN:
                     ieee = identifier[1]
@@ -152,7 +152,7 @@ async def async_get_zha_devices(hass: HomeAssistant) -> list[dict]:
     _LOGGER.debug("Falling back to device registry for ZHA device list")
     try:
         device_registry = dr.async_get(hass)
-        for device_entry in device_registry.devices.values():
+        for device_entry in device_registry.async_get_devices():
             for identifier in device_entry.identifiers:
                 if identifier[0] == ZHA_DOMAIN:
                     ieee = identifier[1]
@@ -200,7 +200,7 @@ async def async_get_zha_device_last_seen(
     # ── Fallback: device registry last_seen (HA 2024.4+) ─────────────────────
     try:
         device_registry = dr.async_get(hass)
-        for device_entry in device_registry.devices.values():
+        for device_entry in device_registry.async_get_devices():
             for identifier in device_entry.identifiers:
                 if identifier[0] == ZHA_DOMAIN and identifier[1] == ieee:
                     return _last_seen_to_timestamp(

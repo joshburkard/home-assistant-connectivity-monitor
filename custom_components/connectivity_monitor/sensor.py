@@ -493,8 +493,6 @@ async def async_setup_entry(  # noqa: C901
     for device_entry in dr.async_entries_for_config_entry(
         device_registry, entry.entry_id
     ):
-        if entry.entry_id not in device_entry.config_entries:
-            continue
         entry_entity_ids = {
             e.entity_id
             for e in er.async_entries_for_device(entity_registry, device_entry.id)
@@ -504,12 +502,7 @@ async def async_setup_entry(  # noqa: C901
             _LOGGER.debug(
                 "Removing orphaned device: %s (%s)", device_entry.name, device_entry.id
             )
-            if device_entry.config_entries == {entry.entry_id}:
-                device_registry.async_remove_device(device_entry.id)
-            else:
-                device_registry.async_update_device(
-                    device_entry.id, remove_config_entry_id=entry.entry_id
-                )
+            device_registry.async_remove_device(device_entry.id)
 
     _LOGGER.debug(
         "Final entities to be added: %s",
