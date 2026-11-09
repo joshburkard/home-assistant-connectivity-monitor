@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from homeassistant.components.connectivity_monitor.matter import (
+from custom_components.connectivity_monitor.matter import (
     async_get_matter_device_active,
     async_get_matter_devices,
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 MATTER_DOMAIN = "matter"
 
@@ -121,7 +121,7 @@ async def test_get_matter_devices_non_matter_device_ignored(
 async def test_get_matter_devices_error(hass: HomeAssistant) -> None:
     """Returns empty list when registry raises AttributeError."""
     with patch(
-        "homeassistant.components.connectivity_monitor.matter.dr.async_get",
+        "custom_components.connectivity_monitor.matter.dr.async_get",
         side_effect=AttributeError("boom"),
     ):
         devices = await async_get_matter_devices(hass)
@@ -272,7 +272,7 @@ async def test_get_matter_device_active_entity_no_state(hass: HomeAssistant) -> 
 async def test_get_matter_device_active_error(hass: HomeAssistant) -> None:
     """Returns None on AttributeError."""
     with patch(
-        "homeassistant.components.connectivity_monitor.matter.dr.async_get",
+        "custom_components.connectivity_monitor.matter.dr.async_get",
         side_effect=AttributeError("boom"),
     ):
         result = await async_get_matter_device_active(hass, "3-5")

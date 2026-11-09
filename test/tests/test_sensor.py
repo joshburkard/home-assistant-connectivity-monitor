@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 from freezegun.api import FrozenDateTimeFactory
 import pytest
 
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     AD_DC_PORTS,
     CONF_ALERT_ACTION,
     CONF_ALERT_ACTION_DELAY,
@@ -38,9 +38,9 @@ from homeassistant.components.connectivity_monitor.const import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from homeassistant.components.connectivity_monitor.sensor import AlertHandler
+from custom_components.connectivity_monitor.sensor import AlertHandler
 
-from tests.common import (
+from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_capture_events,
     async_fire_time_changed,
@@ -86,12 +86,12 @@ async def test_network_sensors_expose_expected_state(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -203,12 +203,12 @@ async def test_network_registry_migration_matches_device_role(
     }
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 side_effect=[
@@ -247,12 +247,12 @@ async def test_coordinator_refresh_uses_default_data_on_failure(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -310,7 +310,7 @@ async def test_zha_sensor_exposes_expected_state_and_attributes(
 
     last_seen = datetime.now().timestamp()
     with patch(
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
+        "custom_components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
         AsyncMock(return_value=last_seen),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -352,7 +352,7 @@ async def test_zha_sensor_exposes_expected_state_and_attributes(
                 "device_name": "Thermostat",
             },
             "sensor.connectivity_monitor_matter_thermostat",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_matter_device_active",
+            "custom_components.connectivity_monitor.coordinator.async_get_matter_device_active",
             True,
             "Active",
             "mdi:chip",
@@ -372,7 +372,7 @@ async def test_zha_sensor_exposes_expected_state_and_attributes(
                 "sw_version": "2026.1",
             },
             "sensor.connectivity_monitor_esphome_garage_node",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_esphome_device_active",
+            "custom_components.connectivity_monitor.coordinator.async_get_esphome_device_active",
             True,
             "Active",
             "mdi:chip",
@@ -389,7 +389,7 @@ async def test_zha_sensor_exposes_expected_state_and_attributes(
                 "device_name": "Tracker",
             },
             "sensor.connectivity_monitor_bluetooth_tracker",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
+            "custom_components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
             {
                 "active": True,
                 "device_found": True,
@@ -495,7 +495,7 @@ async def test_esphome_sensor_does_not_clear_existing_firmware_version(
     )
 
     with patch(
-        "homeassistant.components.connectivity_monitor.coordinator."
+        "custom_components.connectivity_monitor.coordinator."
         "async_get_esphome_device_active",
         AsyncMock(return_value=True),
     ):
@@ -513,12 +513,12 @@ async def test_summary_entity_registry_entry_survives_reload(
     network_config_entry.add_to_hass(hass)
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -562,7 +562,7 @@ async def test_summary_entity_registry_entry_survives_reload(
                 "device_name": "Hallway Sensor",
             },
             "sensor.connectivity_monitor_zha_hallway_sensor",
-            "homeassistant.components.connectivity_monitor.sensor."
+            "custom_components.connectivity_monitor.sensor."
             "ConnectivityMonitorCoordinator._async_update_data",
             {},
         ),
@@ -575,7 +575,7 @@ async def test_summary_entity_registry_entry_survives_reload(
                 "device_name": "Thermostat",
             },
             "sensor.connectivity_monitor_matter_thermostat",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_matter_device_active",
+            "custom_components.connectivity_monitor.coordinator.async_get_matter_device_active",
             None,
         ),
         (
@@ -587,7 +587,7 @@ async def test_summary_entity_registry_entry_survives_reload(
                 "device_name": "Garage Node",
             },
             "sensor.connectivity_monitor_esphome_garage_node",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_esphome_device_active",
+            "custom_components.connectivity_monitor.coordinator.async_get_esphome_device_active",
             None,
         ),
         (
@@ -599,7 +599,7 @@ async def test_summary_entity_registry_entry_survives_reload(
                 "device_name": "Tracker",
             },
             "sensor.connectivity_monitor_bluetooth_tracker",
-            "homeassistant.components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
+            "custom_components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
             {"active": False, "device_found": False},
         ),
     ],
@@ -648,12 +648,12 @@ async def test_alert_handler_triggers_notification_and_action_after_delays(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -757,12 +757,12 @@ async def test_alert_handler_sends_recovery_after_confirmed_reconnect(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -816,12 +816,12 @@ async def test_alert_handler_cancels_recovery_when_device_flaps(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -887,12 +887,12 @@ async def test_alert_handler_preserves_timer_when_entity_id_changes(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -959,12 +959,12 @@ async def test_alert_handler_does_not_repeat_notification_or_action(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -1019,12 +1019,12 @@ async def test_alert_handler_handles_startup_offline_entity(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -1090,7 +1090,7 @@ async def test_zha_sensor_shows_inactive_when_last_seen_exceeds_timeout(
     old_timestamp = (datetime.now() - timedelta(minutes=10)).timestamp()
 
     with patch(
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
+        "custom_components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
         AsyncMock(return_value=old_timestamp),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -1116,7 +1116,7 @@ async def test_zha_sensor_shows_inactive_when_device_not_found_in_zha(
     entry.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
+        "custom_components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
         AsyncMock(return_value=None),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -1142,7 +1142,7 @@ async def test_zha_sensor_shows_unknown_when_coordinator_has_no_data(
     entry.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.sensor."
+        "custom_components.connectivity_monitor.sensor."
         "ConnectivityMonitorCoordinator._async_update_data",
         AsyncMock(return_value={}),
     ):
@@ -1176,7 +1176,7 @@ _PROTO_ALERT_PARAMS = [
             CONF_ALERT_ACTION_DELAY: 3,
         },
         "sensor.connectivity_monitor_zha_door_sensor",
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
+        "custom_components.connectivity_monitor.coordinator.async_get_zha_device_last_seen",
         # active_patch_value: recent timestamp → Active
         None,  # replaced per-test using datetime.now()
         "AA:BB:CC:11:22:33:44:55",
@@ -1196,7 +1196,7 @@ _PROTO_ALERT_PARAMS = [
             CONF_ALERT_ACTION_DELAY: 3,
         },
         "sensor.connectivity_monitor_matter_smart_plug",
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_matter_device_active",
+        "custom_components.connectivity_monitor.coordinator.async_get_matter_device_active",
         True,
         "1-9999",
         id="matter",
@@ -1215,7 +1215,7 @@ _PROTO_ALERT_PARAMS = [
             CONF_ALERT_ACTION_DELAY: 3,
         },
         "sensor.connectivity_monitor_esphome_esp_node",
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_esphome_device_active",
+        "custom_components.connectivity_monitor.coordinator.async_get_esphome_device_active",
         True,
         "esp-node-1",
         id="esphome",
@@ -1234,7 +1234,7 @@ _PROTO_ALERT_PARAMS = [
             CONF_ALERT_ACTION_DELAY: 3,
         },
         "sensor.connectivity_monitor_bluetooth_bt_tag",
-        "homeassistant.components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
+        "custom_components.connectivity_monitor.coordinator.async_get_bluetooth_device_details",
         {"active": True, "device_found": True},
         "11:22:33:44:55:66",
         id="bluetooth",
@@ -1508,12 +1508,12 @@ async def test_ad_overview_sensor_shows_connected_when_all_ports_up(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -1564,12 +1564,12 @@ async def test_ad_overview_sensor_shows_partially_connected_when_some_ports_down
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(side_effect=_update_side_effect),
         ),
@@ -1600,12 +1600,12 @@ async def test_ad_overview_sensor_shows_not_connected_when_all_ports_down(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -1675,12 +1675,12 @@ async def test_overview_sensor_shows_partially_connected(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(side_effect=_varying_update),
         ),

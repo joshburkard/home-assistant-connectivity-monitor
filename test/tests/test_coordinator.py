@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     CONF_BLUETOOTH_ADDRESS,
     CONF_ESPHOME_DEVICE_ID,
     CONF_HOST,
@@ -25,13 +25,13 @@ from homeassistant.components.connectivity_monitor.const import (
     PROTOCOL_UDP,
     PROTOCOL_ZHA,
 )
-from homeassistant.components.connectivity_monitor.coordinator import (
+from custom_components.connectivity_monitor.coordinator import (
     ConnectivityMonitorCoordinator,
     _target_key,
 )
 from homeassistant.core import HomeAssistant
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 def _create_coordinator(

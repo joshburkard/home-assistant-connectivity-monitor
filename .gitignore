@@ -1,6 +1,5 @@
 *.ps1
 test/tests-old/
-test/**/__pycache__/
-custom_components/connectivity_monitor/__pycache__
+__pycache__/
 test/test-api-request.ps1
 .vscode/settings.json

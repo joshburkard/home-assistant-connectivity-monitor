@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
-from homeassistant.components.connectivity_monitor.zha import (
+from custom_components.connectivity_monitor.zha import (
     _build_registry_name_map,
     _get_zha_gateway,
     _last_seen_to_timestamp,
@@ -15,7 +15,7 @@ from homeassistant.components.connectivity_monitor.zha import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 ZHA_DOMAIN = "zha"
 
@@ -189,7 +189,7 @@ def test_build_registry_name_map_name_by_user_priority(hass: HomeAssistant) -> N
 def test_build_registry_name_map_error(hass: HomeAssistant) -> None:
     """Returns empty dict on AttributeError."""
     with patch(
-        "homeassistant.components.connectivity_monitor.zha.dr.async_get",
+        "custom_components.connectivity_monitor.zha.dr.async_get",
         side_effect=AttributeError("boom"),
     ):
         result = _build_registry_name_map(hass)
@@ -446,7 +446,7 @@ async def test_get_zha_device_last_seen_registry_error(hass: HomeAssistant) -> N
     hass.data.pop(ZHA_DOMAIN, None)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.zha.dr.async_get",
+        "custom_components.connectivity_monitor.zha.dr.async_get",
         side_effect=AttributeError("registry boom"),
     ):
         result = await async_get_zha_device_last_seen(hass, ieee)

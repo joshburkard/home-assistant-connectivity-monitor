@@ -8,15 +8,15 @@ from unittest.mock import AsyncMock, call, patch
 
 import pytest
 
-from homeassistant.components.connectivity_monitor import (
+from custom_components.connectivity_monitor import (
     async_migrate_entry,
     async_reload_entry,
     async_setup,
 )
-from homeassistant.components.connectivity_monitor.esphome import (
+from custom_components.connectivity_monitor.esphome import (
     async_refresh_target_metadata,
 )
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     CONF_BLUETOOTH_ADDRESS,
     CONF_DNS_SERVER,
     CONF_ESPHOME_DEVICE_ID,
@@ -40,7 +40,7 @@ from homeassistant.components.lovelace.const import LOVELACE_DATA
 from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntryState
 from homeassistant.core import HomeAssistant
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 
 async def test_load_unload_entry(
@@ -52,12 +52,12 @@ async def test_load_unload_entry(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_prepare_host",
             AsyncMock(return_value=None),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "NetworkProbe.async_update_target",
             AsyncMock(
                 return_value={
@@ -112,7 +112,7 @@ async def test_setup_refreshes_existing_esphome_metadata(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.esphome."
+            "custom_components.connectivity_monitor.esphome."
             "async_get_esphome_devices",
             AsyncMock(
                 return_value=[
@@ -128,7 +128,7 @@ async def test_setup_refreshes_existing_esphome_metadata(
             ),
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.coordinator."
+            "custom_components.connectivity_monitor.coordinator."
             "async_get_esphome_device_active",
             AsyncMock(return_value=True),
         ),
@@ -170,7 +170,7 @@ async def test_esphome_metadata_refresh_keeps_saved_values_when_unavailable(
     entry.add_to_hass(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.esphome."
+        "custom_components.connectivity_monitor.esphome."
         "async_get_esphome_devices",
         AsyncMock(
             return_value=[
@@ -484,11 +484,11 @@ async def test_async_reload_entry_reloads_config_entry(
     """Test reload delegates to unload and setup for the config entry."""
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.async_unload_entry",
+            "custom_components.connectivity_monitor.async_unload_entry",
             AsyncMock(return_value=True),
         ) as mock_unload_entry,
         patch(
-            "homeassistant.components.connectivity_monitor.async_setup_entry",
+            "custom_components.connectivity_monitor.async_setup_entry",
             AsyncMock(return_value=True),
         ) as mock_setup_entry,
     ):

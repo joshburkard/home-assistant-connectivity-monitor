@@ -4,11 +4,11 @@
   "codeowners": ["@joshburkard"],
   "config_flow": true,
   "dependencies": ["bluetooth", "http", "lovelace"],
-  "documentation": "https://github.com/joshburkard/home-assistant-connectivity-monitor/readme.md",
+  "documentation": "https://github.com/joshburkard/home-assistant-connectivity-monitor",
   "integration_type": "service",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/joshburkard/home-assistant-connectivity-monitor/issues",
   "quality_scale": "bronze",
   "requirements": ["icmplib>=3.0.4", "dnspython>=2.8.0"],
-  "version": "1.0.00010"
+  "version": "1.0.00011"
 }

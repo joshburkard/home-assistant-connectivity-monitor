@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from homeassistant.components.connectivity_monitor.esphome import (
+from custom_components.connectivity_monitor.esphome import (
     async_get_esphome_device_active,
     async_get_esphome_devices,
 )
@@ -12,7 +12,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 ESPHOME_DOMAIN = "esphome"
 
@@ -150,7 +150,7 @@ async def test_get_esphome_devices_fallback_path(hass: HomeAssistant) -> None:
 async def test_get_esphome_devices_error(hass: HomeAssistant) -> None:
     """Returns empty list when device registry raises AttributeError."""
     with patch(
-        "homeassistant.components.connectivity_monitor.esphome.dr.async_get",
+        "custom_components.connectivity_monitor.esphome.dr.async_get",
         side_effect=AttributeError("boom"),
     ):
         devices = await async_get_esphome_devices(hass)
@@ -353,7 +353,7 @@ async def test_get_esphome_device_active_entity_no_state(hass: HomeAssistant) ->
 async def test_get_esphome_device_active_error(hass: HomeAssistant) -> None:
     """Returns None on AttributeError."""
     with patch(
-        "homeassistant.components.connectivity_monitor.esphome.dr.async_get",
+        "custom_components.connectivity_monitor.esphome.dr.async_get",
         side_effect=AttributeError("boom"),
     ):
         result = await async_get_esphome_device_active(hass, "entry_id")

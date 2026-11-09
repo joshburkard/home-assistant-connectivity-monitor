@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     CONF_HOST,
     CONF_PORT,
     CONF_PROTOCOL,
@@ -14,7 +14,7 @@ from homeassistant.components.connectivity_monitor.const import (
     PROTOCOL_TCP,
     PROTOCOL_UDP,
 )
-from homeassistant.components.connectivity_monitor.network import NetworkProbe
+from custom_components.connectivity_monitor.network import NetworkProbe
 from homeassistant.core import HomeAssistant
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -188,7 +188,7 @@ async def test_async_test_tcp_success(hass: HomeAssistant) -> None:
     mock_writer.wait_closed = AsyncMock()
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.open_connection",
+        "custom_components.connectivity_monitor.network.asyncio.open_connection",
         return_value=(AsyncMock(), mock_writer),
     ):
         latency = await probe._async_test_tcp("127.0.0.1", 80)
@@ -202,7 +202,7 @@ async def test_async_test_tcp_oserror(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.open_connection",
+        "custom_components.connectivity_monitor.network.asyncio.open_connection",
         side_effect=OSError("connection refused"),
     ):
         latency = await probe._async_test_tcp("10.0.0.1", 9999)
@@ -215,7 +215,7 @@ async def test_async_test_tcp_timeout(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.wait_for",
+        "custom_components.connectivity_monitor.network.asyncio.wait_for",
         side_effect=TimeoutError(),
     ):
         latency = await probe._async_test_tcp("10.0.0.1", 80)
@@ -233,7 +233,7 @@ async def test_async_test_udp_success(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.socket.socket"
+        "custom_components.connectivity_monitor.network.socket.socket"
     ) as mock_socket_cls:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
@@ -250,7 +250,7 @@ async def test_async_test_udp_oserror(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.socket.socket"
+        "custom_components.connectivity_monitor.network.socket.socket"
     ) as mock_socket_cls:
         mock_sock = MagicMock()
         mock_socket_cls.return_value = mock_sock
@@ -288,7 +288,7 @@ async def test_async_icmp_ping_success(hass: HomeAssistant) -> None:
     mock_response.avg_rtt = 12.5
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.NetworkProbe._async_icmp_ping",
+        "custom_components.connectivity_monitor.network.NetworkProbe._async_icmp_ping",
         new=AsyncMock(return_value=12.5),
     ):
         result = await probe._async_icmp_ping("host", "10.0.0.1")
@@ -391,7 +391,7 @@ async def test_get_mac_address_found(hass: HomeAssistant) -> None:
     )
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.create_subprocess_shell",
+        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
         return_value=mock_proc,
     ):
         mac = await probe._get_mac_address("192.168.1.1")
@@ -407,7 +407,7 @@ async def test_get_mac_address_not_found(hass: HomeAssistant) -> None:
     mock_proc.communicate = AsyncMock(return_value=(b"192.168.1.1 -- no entry", b""))
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.create_subprocess_shell",
+        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
         return_value=mock_proc,
     ):
         mac = await probe._get_mac_address("192.168.1.1")
@@ -420,7 +420,7 @@ async def test_get_mac_address_oserror(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.asyncio.create_subprocess_shell",
+        "custom_components.connectivity_monitor.network.asyncio.create_subprocess_shell",
         side_effect=OSError("subprocess failed"),
     ):
         mac = await probe._get_mac_address("192.168.1.1")
@@ -452,7 +452,7 @@ async def test_resolve_host_no_dns_resolver(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+        "custom_components.connectivity_monitor.network.HAVE_DNS",
         False,
     ):
         result = await probe._resolve_host("example.com")
@@ -472,7 +472,7 @@ async def test_resolve_host_with_dns(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+            "custom_components.connectivity_monitor.network.HAVE_DNS",
             True,
         ),
         patch.object(probe, "_get_resolver", new=AsyncMock(return_value=mock_resolver)),
@@ -491,7 +491,7 @@ async def test_resolve_host_dns_resolution_fails(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+            "custom_components.connectivity_monitor.network.HAVE_DNS",
             True,
         ),
         patch.object(probe, "_get_resolver", new=AsyncMock(return_value=mock_resolver)),
@@ -526,11 +526,11 @@ async def test_get_resolver_creates_resolver(hass: HomeAssistant) -> None:
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+            "custom_components.connectivity_monitor.network.HAVE_DNS",
             True,
         ),
         patch(
-            "homeassistant.components.connectivity_monitor.network.dns_resolver",
+            "custom_components.connectivity_monitor.network.dns_resolver",
         ) as mock_dns,
     ):
         mock_dns.Resolver.return_value = mock_resolver
@@ -549,7 +549,7 @@ async def test_get_resolver_returns_cached(hass: HomeAssistant) -> None:
     probe._resolver = mock_resolver
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+        "custom_components.connectivity_monitor.network.HAVE_DNS",
         True,
     ):
         resolver = await probe._get_resolver()
@@ -562,7 +562,7 @@ async def test_get_resolver_no_dns(hass: HomeAssistant) -> None:
     probe = _make_probe(hass)
 
     with patch(
-        "homeassistant.components.connectivity_monitor.network.HAVE_DNS",
+        "custom_components.connectivity_monitor.network.HAVE_DNS",
         False,
     ):
         resolver = await probe._get_resolver()
@@ -617,7 +617,7 @@ async def test_async_prepare_host_refreshes_expired_resolution(
     probe = _make_probe(hass)
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.network.time.monotonic",
+            "custom_components.connectivity_monitor.network.time.monotonic",
             side_effect=[0, 1, 61],
         ),
         patch.object(

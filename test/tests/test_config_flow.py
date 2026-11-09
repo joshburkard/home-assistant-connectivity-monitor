@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     CONF_ALERT_ACTION,
     CONF_ALERT_ACTION_DELAY,
     CONF_ALERT_ACTION_ENABLED,
@@ -40,7 +40,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 pytestmark = pytest.mark.usefixtures("mock_setup_entry")
 
@@ -49,7 +49,7 @@ pytestmark = pytest.mark.usefixtures("mock_setup_entry")
 def mock_network_validation_probe() -> AsyncMock:
     """Default config-flow network validation to a successful probe."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow."
+        "custom_components.connectivity_monitor.config_flow."
         "NetworkProbe.async_update_target",
         AsyncMock(
             return_value={
@@ -292,7 +292,7 @@ async def test_network_flow_rejects_unreachable_first_entry(
     )
 
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow."
+        "custom_components.connectivity_monitor.config_flow."
         "NetworkProbe.async_update_target",
         AsyncMock(
             return_value={
@@ -377,7 +377,7 @@ async def test_network_flow_rejects_unreachable_existing_entry(
     )
 
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow."
+        "custom_components.connectivity_monitor.config_flow."
         "NetworkProbe.async_update_target",
         AsyncMock(
             return_value={
@@ -416,7 +416,7 @@ async def test_network_flow_rejects_unreachable_existing_entry(
 async def test_zha_flow_without_available_devices(hass: HomeAssistant) -> None:
     """Test the ZHA flow when no ZHA devices are available."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_zha_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_zha_devices",
         AsyncMock(return_value=[]),
     ):
         result = await hass.config_entries.flow.async_init(
@@ -436,19 +436,19 @@ async def test_zha_flow_without_available_devices(hass: HomeAssistant) -> None:
     [
         (
             "matter",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_matter_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_matter_devices",
             "matter_device",
             "no_matter_devices",
         ),
         (
             "esphome",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_esphome_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_esphome_devices",
             "esphome_device",
             "no_esphome_devices",
         ),
         (
             "bluetooth",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
             "bluetooth_device",
             "no_bluetooth_devices",
         ),
@@ -487,7 +487,7 @@ async def test_shared_device_flow_without_available_devices(
     [
         (
             "zha",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_zha_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_zha_devices",
             "connectivity_monitor_zha",
             {
                 CONF_TARGETS: [
@@ -506,7 +506,7 @@ async def test_shared_device_flow_without_available_devices(
         ),
         (
             "matter",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_matter_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_matter_devices",
             "connectivity_monitor_matter",
             {
                 CONF_TARGETS: [
@@ -525,7 +525,7 @@ async def test_shared_device_flow_without_available_devices(
         ),
         (
             "esphome",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_esphome_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_esphome_devices",
             "connectivity_monitor_esphome",
             {
                 CONF_TARGETS: [
@@ -544,7 +544,7 @@ async def test_shared_device_flow_without_available_devices(
         ),
         (
             "bluetooth",
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
             "connectivity_monitor_bluetooth",
             {
                 CONF_TARGETS: [
@@ -609,7 +609,7 @@ async def test_shared_device_flow_when_all_devices_already_added(
 async def test_matter_flow_create_first_typed_entry(hass: HomeAssistant) -> None:
     """Test creating the initial Matter typed entry from discovery."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_matter_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_matter_devices",
         AsyncMock(
             return_value=[
                 {
@@ -731,7 +731,7 @@ async def test_esphome_flow_persists_discovered_firmware_version(
 ) -> None:
     """Store ESPHome firmware metadata so the device registry can retain it."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_esphome_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_esphome_devices",
         AsyncMock(
             return_value=[
                 {
@@ -1455,7 +1455,7 @@ async def test_options_flow_removes_protocol_specific_device(
 async def test_zha_flow_create_first_entry(hass: HomeAssistant) -> None:
     """Test creating the initial ZigBee Monitor entry via the ZHA flow."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_zha_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_zha_devices",
         AsyncMock(
             return_value=[
                 {
@@ -1555,7 +1555,7 @@ async def test_zha_flow_updates_existing_typed_entry(hass: HomeAssistant) -> Non
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_zha_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_zha_devices",
             AsyncMock(
                 return_value=[
                     {
@@ -1616,7 +1616,7 @@ async def test_zha_flow_updates_existing_typed_entry(hass: HomeAssistant) -> Non
 async def test_esphome_flow_create_first_entry(hass: HomeAssistant) -> None:
     """Test creating the initial ESPHome Monitor entry via the ESPHome flow."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_esphome_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_esphome_devices",
         AsyncMock(
             return_value=[
                 {
@@ -1718,7 +1718,7 @@ async def test_esphome_flow_updates_existing_typed_entry(hass: HomeAssistant) ->
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_esphome_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_esphome_devices",
             AsyncMock(
                 return_value=[
                     {"device_id": "node-garage", "name": "Garage Node"},
@@ -1777,7 +1777,7 @@ async def test_esphome_flow_updates_existing_typed_entry(hass: HomeAssistant) ->
 async def test_bluetooth_flow_create_first_entry(hass: HomeAssistant) -> None:
     """Test creating the initial Bluetooth Monitor entry via the Bluetooth flow."""
     with patch(
-        "homeassistant.components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
+        "custom_components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
         AsyncMock(
             return_value=[
                 {
@@ -1878,7 +1878,7 @@ async def test_bluetooth_flow_updates_existing_typed_entry(
 
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
+            "custom_components.connectivity_monitor.config_flow.async_get_bluetooth_devices",
             AsyncMock(
                 return_value=[
                     {"bt_address": "AA:BB:CC:DD:EE:FF", "name": "Fitness Tracker"},

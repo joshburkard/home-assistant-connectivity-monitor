@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from homeassistant.components.connectivity_monitor.const import (
+from custom_components.connectivity_monitor.const import (
     CONF_DNS_SERVER,
     CONF_HOST,
     CONF_INTERVAL,
@@ -18,7 +18,12 @@ from homeassistant.components.connectivity_monitor.const import (
     PROTOCOL_ICMP,
 )
 
-from tests.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+
+@pytest.fixture(autouse=True)
+def enable_custom_integrations_for_tests(enable_custom_integrations: None) -> None:
+    """Enable loading custom integrations in Home Assistant test fixtures."""
 
 
 @pytest.fixture
@@ -26,11 +31,11 @@ def mock_setup_entry() -> Generator[AsyncMock]:
     """Override config entry setup during config flow tests."""
     with (
         patch(
-            "homeassistant.components.connectivity_monitor.async_setup_entry",
+            "custom_components.connectivity_monitor.async_setup_entry",
             return_value=True,
         ) as mock_entry_setup,
         patch(
-            "homeassistant.components.connectivity_monitor.async_unload_entry",
+            "custom_components.connectivity_monitor.async_unload_entry",
             return_value=True,
         ),
     ):
