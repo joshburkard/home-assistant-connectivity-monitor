@@ -132,7 +132,7 @@ test("WebPage check rows show labels, units, warning/error/unknown colors, and e
 
 for (const hasMonitorType of [true, false]) {
 test(`WebPage labels and discovery support friendly names with monitor_type=${hasMonitorType}`, () => {
-  const page = webpage("https://www.food-bank.net/", "food_bank", "Connected");
+  const page = webpage("www.google.com", "google", "Connected");
   const labels = {
     overall: "Overall Status",
     dns: "DNS Status",
@@ -144,7 +144,7 @@ test(`WebPage labels and discovery support friendly names with monitor_type=${ha
   };
   for (const entity of Object.values(page.states)) {
     const check = entity.attributes.webpage_check;
-    entity.attributes.friendly_name = `Food-Bank.net ${labels[check]}`;
+    entity.attributes.friendly_name = `google.com ${labels[check]}`;
     delete entity.attributes.webpage_check;
     delete entity.attributes.device_name;
     if (!hasMonitorType) delete entity.attributes.monitor_type;
@@ -154,12 +154,12 @@ test(`WebPage labels and discovery support friendly names with monitor_type=${ha
   const instance = card(page.states);
   const devices = instance._getDevices();
   assert.equal(devices.length, 1);
-  assert.equal(devices[0].name, "Food-Bank.net");
+  assert.equal(devices[0].name, "google.com");
   assert.equal(context.cmGetSelectableDevices({ states: page.states })[0].name,
-    "Food-Bank.net");
+    "google.com");
   const html = instance._renderDevice(devices[0]);
-  assert.match(html, /class='device-name'>Food-Bank\.net</);
-  assert.doesNotMatch(html, /Overall Status|Food-Bank\.net DNS|Food-Bank\.net Certificate/);
+  assert.match(html, /class='device-name'>google\.com</);
+  assert.doesNotMatch(html, /Overall Status|google\.com DNS|google\.com Certificate/);
   for (const [check, label] of Object.entries(labels)) {
     if (check !== "overall") {
       assert.match(html, new RegExp(`class='sensor-proto'>${label}<`));
@@ -171,13 +171,13 @@ test(`WebPage labels and discovery support friendly names with monitor_type=${ha
 }
 
 test("WebPage headers preserve explicit device names and handle URL-based friendly names", () => {
-  const page = webpage("https://www.burkard.it/", "burkard", "Connected");
+  const page = webpage("https://www.microsoft.com/", "microsoft", "Connected");
   const overall = page.states[page.overall];
   overall.attributes.device_name = "My Overall Status";
   assert.equal(card(page.states)._getDevices()[0].name, "My Overall Status");
   delete overall.attributes.device_name;
-  overall.attributes.friendly_name = "https://www.burkard.it Overall Status";
-  assert.equal(card(page.states)._getDevices()[0].name, "https://www.burkard.it");
+  overall.attributes.friendly_name = "https://www.microsoft.com Overall Status";
+  assert.equal(card(page.states)._getDevices()[0].name, "https://www.microsoft.com");
 });
 
 test("existing WebPage overall sensors remain discoverable before a probe result exists", () => {

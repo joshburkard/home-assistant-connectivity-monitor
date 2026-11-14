@@ -2,6 +2,7 @@
 
 | Version | Date | Description |
 | --- | --- | --- |
+| 1.0.00012 | 14/11/2026 | added WebPage device type (DNS, reachability, response time, HTTPS certificate validity/expiry and expected content checks with overall status); added WebPage support to LoveLace card; grouped all counter sensors in a shared Summary device and added WebPage counters |
 | 1.0.00011 | 09/11/2026 | fix test discovery and CI setup |
 | 1.0.00010 | 09/11/2026 | stabilize network entity IDs and registry migration; alert on unavailable sensors; refresh ESPHome metadata automatically; update registry lookups and coordinator helpers |
 | 1.0.00009 | 18/10/2026 | fix ESPHome connectivity status and device metadata; improve alert tracking, network cache refresh, stable sensor IDs, and summary entity retention |

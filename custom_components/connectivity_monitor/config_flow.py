@@ -80,7 +80,8 @@ def _webpage_schema(
         vol.Required(CONF_URL, default=settings.get(CONF_URL, "")): str,
         vol.Optional("device_name", default=settings.get("device_name", "")): str,
         vol.Optional(
-            CONF_EXPECTED_TEXT, default=settings.get(CONF_EXPECTED_TEXT, "")
+            CONF_EXPECTED_TEXT,
+            description={"suggested_value": settings.get(CONF_EXPECTED_TEXT, "")},
         ): str,
         vol.Required(
             CONF_CERTIFICATE_WARNING_DAYS,

@@ -193,6 +193,57 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
     assert hass.states.get("sensor.connectivity_monitor_webpage_disconnected_devices").state == "1"
 
 
+async def test_clearing_webpage_text_removes_content_sensor(
+    hass: HomeAssistant,
+) -> None:
+    """Clearing the optional text disables the check and removes its sensor."""
+    url = "https://example.com/"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WebPage Monitor",
+        unique_id="connectivity_monitor_webpage",
+        version=2,
+        data={
+            CONF_TARGETS: [{
+                CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+                CONF_URL: url,
+                CONF_HOST: url,
+                CONF_EXPECTED_TEXT: "previous",
+                "device_name": "Page",
+            }],
+            CONF_INTERVAL: 30,
+            CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
+        },
+    )
+    entry.add_to_hass(hass)
+    with patch(
+        "custom_components.connectivity_monitor.webpage.WebPageProbe.async_update_target",
+        AsyncMock(return_value={"connected": True}),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        registry = er.async_get(hass)
+        content_unique_id = f"connectivity_webpage_content_{url}"
+        assert registry.async_get_entity_id("sensor", DOMAIN, content_unique_id)
+
+        result = await hass.config_entries.options.async_init(entry.entry_id)
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {"action": "webpage"}
+        )
+        result = await hass.config_entries.options.async_configure(
+            result["flow_id"], {CONF_URL: url}
+        )
+        validated = result["data_schema"]({CONF_URL: url})
+        await hass.config_entries.options.async_configure(result["flow_id"], validated)
+        await hass.async_block_till_done()
+
+        assert not entry.data[CONF_TARGETS][0].get(CONF_EXPECTED_TEXT)
+        assert registry.async_get_entity_id("sensor", DOMAIN, content_unique_id) is None
+        assert entry.runtime_data.coordinator.targets[0].get(CONF_EXPECTED_TEXT) in (
+            None, ""
+        )
+
+
 async def test_network_sensors_expose_expected_state(
     hass: HomeAssistant,
     network_config_entry: MockConfigEntry,

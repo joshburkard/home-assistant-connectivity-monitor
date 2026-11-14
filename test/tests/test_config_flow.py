@@ -225,6 +225,70 @@ async def test_options_flow_webpage_edit_and_remove(hass: HomeAssistant) -> None
     assert entry.data[CONF_TARGETS] == []
 
 
+@pytest.mark.parametrize("submitted_text", [None, ""])
+async def test_options_flow_webpage_clear_expected_text(
+    hass: HomeAssistant, submitted_text: str | None,
+) -> None:
+    """Clearing the optional field must not restore its previous value."""
+    url = "https://example.com/"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="connectivity_monitor_webpage",
+        title="WebPage Monitor",
+        version=2,
+        data={
+            CONF_TARGETS: [{
+                CONF_URL: url,
+                CONF_HOST: url,
+                CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+                CONF_EXPECTED_TEXT: "previous",
+                CONF_CERTIFICATE_WARNING_DAYS: 30,
+                "device_name": "Page",
+            }],
+            CONF_INTERVAL: 45,
+            CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "webpage"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_URL: url}
+    )
+    marker = next(
+        key for key in result["data_schema"].schema
+        if key == CONF_EXPECTED_TEXT
+    )
+    assert marker.description["suggested_value"] == "previous"
+
+    user_input = {CONF_URL: url, CONF_CERTIFICATE_WARNING_DAYS: 30}
+    if submitted_text is not None:
+        user_input[CONF_EXPECTED_TEXT] = submitted_text
+    # Home Assistant validates against the form schema before submitting it.
+    validated = result["data_schema"](user_input)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], validated
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert not entry.data[CONF_TARGETS][0].get(CONF_EXPECTED_TEXT)
+    assert entry.data[CONF_TARGETS][0][CONF_CERTIFICATE_WARNING_DAYS] == 30
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "webpage"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_URL: url}
+    )
+    marker = next(
+        key for key in result["data_schema"].schema
+        if key == CONF_EXPECTED_TEXT
+    )
+    assert marker.description["suggested_value"] == ""
+
+
 async def test_network_flow_create_first_entry(
     hass: HomeAssistant,
 ) -> None:
