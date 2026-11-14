@@ -12,6 +12,7 @@ The Connectivity Monitor integration supports several monitored target types:
 - Matter devices
 - ESPHome devices
 - Bluetooth devices
+- WebPages
 
 The tests in this folder verify four main areas:
 
