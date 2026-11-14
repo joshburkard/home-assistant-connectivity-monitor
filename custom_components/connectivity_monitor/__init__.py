@@ -11,6 +11,7 @@ from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.typing import ConfigType
 
 from .const import (
@@ -26,6 +27,8 @@ from .const import (
     PROTOCOL_ESPHOME,
     PROTOCOL_MATTER,
     PROTOCOL_ZHA,
+    SIGNAL_SUMMARY_CHANGED,
+    SUMMARY_UNIQUE_ID,
     VERSION,
 )
 from .coordinator import (
@@ -243,6 +246,9 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: ConnectivityMonitorConfigEntry
 ) -> bool:
     """Set up Connectivity Monitor from a config entry."""
+    if entry.unique_id == SUMMARY_UNIQUE_ID:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+        return True
     await async_refresh_target_metadata(hass, entry)
     alert_handler = AlertHandler(hass)
     coordinator = ConnectivityMonitorCoordinator(
@@ -259,6 +265,14 @@ async def async_setup_entry(
     )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if not any(
+        configured.unique_id == SUMMARY_UNIQUE_ID
+        for configured in hass.config_entries.async_entries(DOMAIN)
+    ):
+        await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_IMPORT}, data={"entry_type": "summary"}
+        )
+    async_dispatcher_send(hass, SIGNAL_SUMMARY_CHANGED)
     return True
 
 
@@ -274,7 +288,15 @@ async def async_unload_entry(
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok and hasattr(entry, "runtime_data"):
         del entry.runtime_data
+    if unload_ok and entry.unique_id != SUMMARY_UNIQUE_ID:
+        async_dispatcher_send(hass, SIGNAL_SUMMARY_CHANGED)
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Refresh summary counters when a source monitor entry is removed."""
+    if entry.unique_id != SUMMARY_UNIQUE_ID:
+        async_dispatcher_send(hass, SIGNAL_SUMMARY_CHANGED)
 
 
 async def async_reload_entry(

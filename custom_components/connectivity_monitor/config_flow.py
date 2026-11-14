@@ -45,6 +45,7 @@ from .const import (
     DEFAULT_PORT,
     DEFAULT_PROTOCOL,
     DOMAIN,
+    SUMMARY_UNIQUE_ID,
     PROTOCOL_AD_DC,
     PROTOCOL_BLUETOOTH,
     PROTOCOL_ESPHOME,
@@ -259,6 +260,10 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_import(self, data) -> ConfigFlowResult:
         """Handle import from automated migration — creates a typed entry directly."""
         entry_type = data.get("entry_type", "network")
+        if entry_type == "summary":
+            await self.async_set_unique_id(SUMMARY_UNIQUE_ID)
+            self._abort_if_unique_id_configured()
+            return self.async_create_entry(title="Summary", data={})
         unique_id = self.ENTRY_UNIQUE_IDS.get(
             entry_type, f"connectivity_monitor_{entry_type}"
         )
@@ -277,7 +282,10 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle a flow initiated by the user — choose device type."""
         # Copy shared settings (interval, DNS) from any existing entry but do NOT
         # pre-populate targets — each device type now lives in its own typed entry.
-        entries = self._async_current_entries()
+        entries = [
+            entry for entry in self._async_current_entries()
+            if entry.unique_id != SUMMARY_UNIQUE_ID
+        ]
         if entries:
             entry = entries[0]
             self._data = {
@@ -1276,6 +1284,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     async def async_step_init(self, user_input=None) -> ConfigFlowResult:
         """Manage the options."""
+        if self.config_entry.unique_id == SUMMARY_UNIQUE_ID:
+            return self.async_abort(reason="summary_managed")
         self.config_data = dict(self.config_entry.data)
         self._targets = list(self.config_data[CONF_TARGETS])
         return await self.async_step_menu()

@@ -4,6 +4,8 @@ import json
 import os
 
 DOMAIN = "connectivity_monitor"
+SUMMARY_UNIQUE_ID = "connectivity_monitor_summary"
+SIGNAL_SUMMARY_CHANGED = f"{DOMAIN}_summary_changed"
 
 # Load version from manifest.json
 MANIFEST_PATH = os.path.join(os.path.dirname(__file__), "manifest.json")

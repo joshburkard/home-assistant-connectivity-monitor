@@ -30,6 +30,7 @@ from custom_components.connectivity_monitor.const import (
     DEFAULT_DNS_SERVER,
     DEFAULT_INACTIVE_TIMEOUT,
     DOMAIN,
+    SUMMARY_UNIQUE_ID,
     PROTOCOL_AD_DC,
     PROTOCOL_BLUETOOTH,
     PROTOCOL_ESPHOME,
@@ -88,6 +89,32 @@ async def test_user_step_shows_device_type_selector(hass: HomeAssistant) -> None
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] is None
+
+
+async def test_summary_import_creates_single_managed_entry(hass: HomeAssistant) -> None:
+    """The shared summary entry has no targets and cannot be created twice."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_IMPORT}, data={"entry_type": "summary"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].unique_id == SUMMARY_UNIQUE_ID
+    assert result["result"].data == {}
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_IMPORT}, data={"entry_type": "summary"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
+async def test_options_flow_summary_is_managed(hass: HomeAssistant) -> None:
+    """Summary settings cannot accidentally enter a monitor configuration flow."""
+    entry = MockConfigEntry(
+        domain=DOMAIN, title="Summary", unique_id=SUMMARY_UNIQUE_ID, version=2, data={},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "summary_managed"
 
 
 async def test_webpage_flow_create_merge_and_reject_duplicates(

@@ -433,7 +433,8 @@
             "all_bluetooth_devices_added": "All Bluetooth devices are already being monitored."
         },
         "abort": {
-            "cleanup_done": "Orphaned device cleanup completed."
+            "cleanup_done": "Orphaned device cleanup completed.",
+            "summary_managed": "Summary counters are managed automatically by the monitor entries."
         }
     }
 }

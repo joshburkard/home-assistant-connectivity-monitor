@@ -28,6 +28,7 @@ from custom_components.connectivity_monitor.const import (
     CONF_ZHA_IEEE,
     CONF_URL,
     PROTOCOL_WEBPAGE,
+    SUMMARY_UNIQUE_ID,
     DEFAULT_DNS_SERVER,
     DEFAULT_INACTIVE_TIMEOUT,
     DOMAIN,
@@ -182,6 +183,14 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
     assert len(devices) == 1
     assert devices[0].model == "WebPage Monitor"
     assert (DOMAIN, f"webpage:{url}") in devices[0].identifiers
+    summary = next(
+        configured for configured in hass.config_entries.async_entries(DOMAIN)
+        if configured.unique_id == SUMMARY_UNIQUE_ID
+    )
+    summary_entities = er.async_entries_for_config_entry(er.async_get(hass), summary.entry_id)
+    assert len(summary_entities) == 2
+    assert hass.states.get("sensor.connectivity_monitor_webpage_connected_devices").state == "0"
+    assert hass.states.get("sensor.connectivity_monitor_webpage_disconnected_devices").state == "1"
 
 
 async def test_network_sensors_expose_expected_state(
@@ -618,6 +627,17 @@ async def test_summary_entity_registry_entry_survives_reload(
 ) -> None:
     """Reloading does not remove customized summary entity registry entries."""
     network_config_entry.add_to_hass(hass)
+    unique_id = (
+        f"connectivity_count_{network_config_entry.entry_id}_"
+        "network_connected_devices"
+    )
+    entity_registry = er.async_get(hass)
+    original = entity_registry.async_get_or_create(
+        "sensor", DOMAIN, unique_id,
+        config_entry=network_config_entry,
+        suggested_object_id="custom_network_count",
+    )
+    entity_registry.async_update_entity(original.entity_id, name="Pinned count name")
     with (
         patch(
             "custom_components.connectivity_monitor.coordinator."
@@ -640,14 +660,8 @@ async def test_summary_entity_registry_entry_survives_reload(
         assert await hass.config_entries.async_setup(network_config_entry.entry_id)
         await hass.async_block_till_done()
 
-        unique_id = (
-            f"connectivity_count_{network_config_entry.entry_id}_"
-            "network_connected_devices"
-        )
-        entity_registry = er.async_get(hass)
         entity_id = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
-        assert entity_id is not None
-        entity_registry.async_update_entity(entity_id, name="Pinned count name")
+        assert entity_id == original.entity_id
 
         assert await hass.config_entries.async_reload(network_config_entry.entry_id)
         await hass.async_block_till_done()
@@ -655,6 +669,86 @@ async def test_summary_entity_registry_entry_survives_reload(
     restored = entity_registry.async_get_entity_id("sensor", DOMAIN, unique_id)
     assert restored == entity_id
     assert entity_registry.async_get(restored).name == "Pinned count name"
+    summary = next(
+        entry for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.unique_id == SUMMARY_UNIQUE_ID
+    )
+    assert entity_registry.async_get(restored).config_entry_id == summary.entry_id
+    assert entity_registry.async_get(restored).device_id is not None
+
+
+async def test_summary_shares_device_and_updates_webpage_counts(
+    hass: HomeAssistant,
+    network_config_entry: MockConfigEntry,
+) -> None:
+    """All counters share one device and webpage counts follow overall health."""
+    network_config_entry.add_to_hass(hass)
+    targets = [
+        {
+            CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+            CONF_URL: f"https://example.com/{path}",
+            CONF_HOST: f"https://example.com/{path}",
+            "device_name": path,
+        }
+        for path in ("healthy", "unhealthy")
+    ]
+    webpage_entry = MockConfigEntry(
+        domain=DOMAIN, title="WebPage Monitor", unique_id="connectivity_monitor_webpage",
+        version=2, data={
+            CONF_TARGETS: targets, CONF_INTERVAL: 30, CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
+        },
+    )
+    with (
+        patch(
+            "custom_components.connectivity_monitor.coordinator.NetworkProbe.async_prepare_host",
+            AsyncMock(),
+        ),
+        patch(
+            "custom_components.connectivity_monitor.coordinator.NetworkProbe.async_update_target",
+            AsyncMock(return_value={"connected": True}),
+        ),
+        patch(
+            "custom_components.connectivity_monitor.webpage.WebPageProbe.async_update_target",
+            AsyncMock(side_effect=[{"connected": True}, {"connected": False}]),
+        ),
+    ):
+        assert await hass.config_entries.async_setup(network_config_entry.entry_id)
+        await hass.async_block_till_done()
+        webpage_entry.add_to_hass(hass)
+        assert await hass.config_entries.async_setup(webpage_entry.entry_id)
+        await hass.async_block_till_done()
+    summary = next(
+        entry for entry in hass.config_entries.async_entries(DOMAIN)
+        if entry.unique_id == SUMMARY_UNIQUE_ID
+    )
+    registry = er.async_get(hass)
+    counters = er.async_entries_for_config_entry(registry, summary.entry_id)
+    assert len(counters) == 7
+    assert len({counter.device_id for counter in counters}) == 1
+    summary_devices = dr.async_entries_for_config_entry(dr.async_get(hass), summary.entry_id)
+    assert len(summary_devices) == 1
+    assert summary_devices[0].name == "Connectivity Monitor Summary"
+    connected_id = "sensor.connectivity_monitor_webpage_connected_devices"
+    disconnected_id = "sensor.connectivity_monitor_webpage_disconnected_devices"
+    assert hass.states.get(connected_id).state == "1"
+    assert hass.states.get(disconnected_id).state == "1"
+
+    from custom_components.connectivity_monitor.coordinator import _target_key
+
+    coordinator = webpage_entry.runtime_data.coordinator
+    coordinator.async_set_updated_data({
+        _target_key(target): {"connected": True} for target in targets
+    })
+    await hass.async_block_till_done()
+    assert hass.states.get(connected_id).state == "2"
+    assert hass.states.get(disconnected_id).state == "0"
+    assert await hass.config_entries.async_remove(webpage_entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(connected_id) is None
+    assert hass.states.get(disconnected_id) is None
+    remaining = er.async_entries_for_config_entry(registry, summary.entry_id)
+    assert len(remaining) == 5
+    assert {counter.device_id for counter in remaining} == {summary_devices[0].id}
 
 
 @pytest.mark.parametrize(

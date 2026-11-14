@@ -24,6 +24,19 @@ This integration allows to monitor devices and create Alert Notification and Ale
 
 ## Example
 
+### Summary counters
+
+A managed **Summary** integration entry groups all counter sensors on one
+**Connectivity Monitor Summary** device, instead of leaving them ungrouped.
+Existing counter entity IDs and custom names are preserved on upgrade.
+The counters reuse each monitor's coordinator data; no additional probes run.
+
+WebPage counters report **Connected Devices** and **Disconnected Devices**, one
+per configured URL based on overall health (including content and certificate
+checks). Summary counters update as source monitors refresh, are added, or removed.
+Configure monitoring through the original device-type entries; the Summary entry
+has no editable monitoring settings.
+
 ### WebPage monitoring
 
 Choose **WebPage** when adding the integration. Enter an absolute HTTP(S) URL,

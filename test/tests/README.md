@@ -20,6 +20,10 @@ The tests in this folder verify four main areas:
 3. Sensor behavior: state, attributes, and icons for each monitored target type.
 4. Alert handling: delayed notifications and actions for outages and recoveries.
 
+Summary tests verify that counters from different monitor types share a single
+device, retain entity IDs and custom names during migration and reload, follow
+WebPage overall-health updates, and disappear when their source entry is removed.
+
 Most tests mock the real network or device lookups. That keeps the suite deterministic and proves the integration logic without depending on actual devices.
 
 ## How To Run These Tests
