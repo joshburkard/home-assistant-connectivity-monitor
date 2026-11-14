@@ -21,6 +21,7 @@ from .const import (
     CONF_MATTER_NODE_ID,
     CONF_PORT,
     CONF_PROTOCOL,
+    CONF_URL,
     CONF_ZHA_IEEE,
     DEFAULT_INACTIVE_TIMEOUT,
     DOMAIN,
@@ -31,11 +32,13 @@ from .const import (
     PROTOCOL_MATTER,
     PROTOCOL_TCP,
     PROTOCOL_UDP,
+    PROTOCOL_WEBPAGE,
     PROTOCOL_ZHA,
 )
 from .esphome import async_get_esphome_device_active
 from .matter import async_get_matter_device_active
 from .network import NetworkProbe
+from .webpage import WebPageProbe
 from .zha import async_get_zha_device_last_seen
 
 _LOGGER = logging.getLogger(__name__)
@@ -55,6 +58,8 @@ type ConnectivityMonitorConfigEntry = ConfigEntry[ConnectivityMonitorRuntimeData
 def _target_key(target: dict) -> str:
     """Build a stable key for a configured target."""
     protocol = target[CONF_PROTOCOL]
+    if protocol == PROTOCOL_WEBPAGE:
+        return f"{protocol}:{target[CONF_URL]}"
     if protocol in (PROTOCOL_TCP, PROTOCOL_UDP, PROTOCOL_AD_DC):
         return f"{protocol}:{target[CONF_HOST]}:{target.get(CONF_PORT, 'none')}"
     if protocol == PROTOCOL_ICMP:
@@ -91,6 +96,7 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
         )
         self.targets = targets
         self._network_probe = NetworkProbe(hass, dns_server)
+        self._webpage_probe = WebPageProbe(hass)
 
     def get_target_data(self, target: dict) -> dict[str, Any]:
         """Return the last known payload for a specific target."""
@@ -107,6 +113,7 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
                 PROTOCOL_MATTER,
                 PROTOCOL_ESPHOME,
                 PROTOCOL_BLUETOOTH,
+                PROTOCOL_WEBPAGE,
             )
         }
         await asyncio.gather(
@@ -133,6 +140,8 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
 
     def _default_result_for(self, target: dict) -> dict[str, Any]:
         """Return a protocol-specific empty payload."""
+        if target[CONF_PROTOCOL] == PROTOCOL_WEBPAGE:
+            return {"connected": False, "error": "update_failed"}
         if target[CONF_PROTOCOL] in (
             PROTOCOL_ZHA,
             PROTOCOL_MATTER,
@@ -150,6 +159,8 @@ class ConnectivityMonitorCoordinator(DataUpdateCoordinator):
     async def _async_update_target(self, target: dict) -> dict[str, Any]:
         """Dispatch a target update to the protocol-specific probe."""
         protocol = target[CONF_PROTOCOL]
+        if protocol == PROTOCOL_WEBPAGE:
+            return await self._webpage_probe.async_update_target(target)
         if protocol in (PROTOCOL_TCP, PROTOCOL_UDP, PROTOCOL_ICMP, PROTOCOL_AD_DC):
             return await self._network_probe.async_update_target(target)
         if protocol == PROTOCOL_ZHA:

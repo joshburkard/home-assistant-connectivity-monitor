@@ -23,6 +23,10 @@ from custom_components.connectivity_monitor.const import (
     CONF_PROTOCOL,
     CONF_TARGETS,
     CONF_ZHA_IEEE,
+    CONF_URL,
+    CONF_EXPECTED_TEXT,
+    CONF_CERTIFICATE_WARNING_DAYS,
+    PROTOCOL_WEBPAGE,
     DEFAULT_DNS_SERVER,
     DEFAULT_INACTIVE_TIMEOUT,
     DOMAIN,
@@ -84,6 +88,114 @@ async def test_user_step_shows_device_type_selector(hass: HomeAssistant) -> None
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] is None
+
+
+async def test_webpage_flow_create_merge_and_reject_duplicates(
+    hass: HomeAssistant,
+) -> None:
+    """Create a typed monitor, reject duplicates, and add a second URL."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"device_type": "webpage"}
+    )
+    assert result["step_id"] == "webpage"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: "https://user:secret@example.com"}
+    )
+    assert result["errors"] == {CONF_URL: "invalid_url"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            CONF_URL: "https://example.com/status",
+            CONF_EXPECTED_TEXT: "healthy",
+            CONF_CERTIFICATE_WARNING_DAYS: 14,
+            "device_name": "Status Page",
+        },
+    )
+    assert result["step_id"] == "interval"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_INTERVAL: 45}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    entry = result["result"]
+    assert entry.unique_id == "connectivity_monitor_webpage"
+    target = entry.data[CONF_TARGETS][0]
+    assert target[CONF_PROTOCOL] == PROTOCOL_WEBPAGE
+    assert target[CONF_EXPECTED_TEXT] == "healthy"
+    assert target[CONF_CERTIFICATE_WARNING_DAYS] == 14
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"device_type": "webpage"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: "https://example.com/status"}
+    )
+    assert result["errors"] == {CONF_URL: "already_configured"}
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_URL: "https://example.com/other"}
+    )
+    await hass.async_block_till_done()
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "device_added"
+    assert len(entry.data[CONF_TARGETS]) == 2
+    assert entry.data[CONF_INTERVAL] == 45
+
+
+async def test_options_flow_webpage_edit_and_remove(hass: HomeAssistant) -> None:
+    """Persist edited checks and remove only the selected webpage."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="connectivity_monitor_webpage",
+        title="WebPage Monitor",
+        version=2,
+        data={
+            CONF_TARGETS: [{
+                CONF_URL: "https://example.com/",
+                CONF_HOST: "https://example.com/",
+                CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+                CONF_EXPECTED_TEXT: "old",
+                CONF_CERTIFICATE_WARNING_DAYS: 30,
+                "device_name": "Page",
+            }],
+            CONF_INTERVAL: 45,
+            CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "webpage"}
+    )
+    assert result["step_id"] == "webpage_select"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_URL: "https://example.com/"}
+    )
+    assert result["step_id"] == "webpage"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {
+            CONF_URL: "https://example.com/",
+            CONF_EXPECTED_TEXT: "new",
+            CONF_CERTIFICATE_WARNING_DAYS: 7,
+        },
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.data[CONF_TARGETS][0][CONF_EXPECTED_TEXT] == "new"
+    assert entry.data[CONF_TARGETS][0][CONF_CERTIFICATE_WARNING_DAYS] == 7
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"action": "remove_device"}
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"device": "https://example.com/"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.data[CONF_TARGETS] == []
 
 
 async def test_network_flow_create_first_entry(

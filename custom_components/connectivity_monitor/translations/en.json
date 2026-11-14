@@ -73,6 +73,22 @@
                     "alert_action_delay": "Action Delay (minutes)"
                 }
             },
+            "webpage": {
+                "title": "Configure WebPage",
+                "description": "Monitor HTTP(S) availability, optional case-sensitive response text, and certificate expiry. Certificates within the warning threshold make the target unhealthy.",
+                "data": {
+                    "url": "WebPage URL",
+                    "device_name": "Device Name (optional)",
+                    "expected_text": "Expected Text (optional, case-sensitive)",
+                    "certificate_warning_days": "Certificate Warning Threshold (days)",
+                    "alerts_enabled": "Enable Alerts",
+                    "alert_group": "Alert Group",
+                    "alert_delay": "Alert Delay (minutes)",
+                    "alert_action_enabled": "Enable Alert Action",
+                    "alert_action": "Alert Action (automation or script)",
+                    "alert_action_delay": "Action Delay (minutes)"
+                }
+            },
             "zha_device": {
                 "title": "Add ZigBee Device (ZHA)",
                 "description": "Select a ZigBee device discovered by ZHA to monitor",
@@ -136,6 +152,8 @@
             }
         },
         "error": {
+            "invalid_url": "Enter an absolute HTTP or HTTPS URL without credentials or a fragment.",
+            "already_configured": "This webpage is already being monitored.",
             "unknown": "Unexpected error occurred. Please check Home Assistant logs.",
             "invalid_dns_server": "Invalid DNS server IP address",
             "no_zha_devices": "No ZigBee devices found. Make sure ZHA is configured and has discovered devices.",
@@ -154,6 +172,28 @@
     },
     "options": {
         "step": {
+            "webpage_select": {
+                "title": "Select WebPage",
+                "data": {
+                    "url": "WebPage"
+                }
+            },
+            "webpage": {
+                "title": "Modify WebPage",
+                "description": "Edit the URL, response text, certificate warning threshold, or alerts.",
+                "data": {
+                    "url": "WebPage URL",
+                    "device_name": "Device Name",
+                    "expected_text": "Expected Text (optional, case-sensitive)",
+                    "certificate_warning_days": "Certificate Warning Threshold (days)",
+                    "alerts_enabled": "Enable Alerts",
+                    "alert_group": "Alert Group",
+                    "alert_delay": "Alert Delay (minutes)",
+                    "alert_action_enabled": "Enable Alert Action",
+                    "alert_action": "Alert Action (automation or script)",
+                    "alert_action_delay": "Action Delay (minutes)"
+                }
+            },
             "menu": {
                 "title": "Connectivity Monitor",
                 "description": "Choose what to configure",
@@ -379,6 +419,8 @@
         },
         "error": {
             "no_notify_groups": "No notification groups found. Please set up notification groups in Home Assistant first.",
+            "invalid_url": "Enter an absolute HTTP or HTTPS URL without credentials or a fragment.",
+            "already_configured": "This webpage is already being monitored.",
             "invalid_dns_server": "Invalid DNS server IP address",
             "invalid_host": "Host cannot be empty",
             "no_zha_devices": "No ZigBee devices found. Make sure ZHA is configured and has discovered devices.",

@@ -17,6 +17,7 @@ from custom_components.connectivity_monitor.const import (
     CONF_BLUETOOTH_ADDRESS,
     CONF_DNS_SERVER,
     CONF_ESPHOME_DEVICE_ID,
+    CONF_EXPECTED_TEXT,
     CONF_HOST,
     CONF_INACTIVE_TIMEOUT,
     CONF_INTERVAL,
@@ -25,6 +26,8 @@ from custom_components.connectivity_monitor.const import (
     CONF_PROTOCOL,
     CONF_TARGETS,
     CONF_ZHA_IEEE,
+    CONF_URL,
+    PROTOCOL_WEBPAGE,
     DEFAULT_DNS_SERVER,
     DEFAULT_INACTIVE_TIMEOUT,
     DOMAIN,
@@ -75,6 +78,110 @@ def _alerting_network_config_entry(
             CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
         },
     )
+
+
+@pytest.mark.parametrize(
+    ("url", "text", "sensor_count"),
+    [
+        ("http://example.com/", "", 4),
+        ("https://example.com/", "", 6),
+        ("https://example.com/", "healthy", 7),
+    ],
+)
+async def test_webpage_sensors_expose_checks_and_register_alerts(
+    hass: HomeAssistant,
+    url: str,
+    text: str,
+    sensor_count: int,
+) -> None:
+    """Create conditional detail sensors on one device; only overall sends alerts."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="WebPage Monitor",
+        unique_id="connectivity_monitor_webpage",
+        version=2,
+        data={
+            CONF_TARGETS: [{
+                CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+                CONF_URL: url,
+                CONF_HOST: url,
+                CONF_EXPECTED_TEXT: text,
+                "device_name": "Status Page",
+                CONF_ALERT_GROUP: "family",
+                CONF_ALERT_DELAY: 2,
+            }],
+            CONF_INTERVAL: 30,
+            CONF_DNS_SERVER: DEFAULT_DNS_SERVER,
+        },
+    )
+    entry.add_to_hass(hass)
+    with (
+        patch(
+            "custom_components.connectivity_monitor.webpage."
+            "WebPageProbe.async_update_target",
+            AsyncMock(return_value={
+                "connected": False,
+                "dns_resolved": True,
+                "resolved_ips": ["192.0.2.1"],
+                "http_available": True,
+                "http_status": 200,
+                "text_found": False,
+                "certificate_valid": True,
+                "certificate_expiring_soon": True,
+                "certificate_days_remaining": 7,
+                "latency": 42,
+                "error": "text_missing",
+            }),
+        ),
+        patch(
+            "custom_components.connectivity_monitor.sensor."
+            "AlertHandler.async_setup_alerts", AsyncMock(),
+        ) as alerts,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    entities = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+    assert len(entities) == sensor_count
+    assert len({entity.device_id for entity in entities}) == 1
+    by_unique_id = {entity.unique_id: entity.entity_id for entity in entities}
+    overall_id = by_unique_id[f"connectivity_webpage_{url}"]
+    state = hass.states.get(overall_id)
+    assert state is not None
+    assert state.state == "Disconnected"
+    assert state.attributes["http_available"] is True
+    assert state.attributes["text_found"] is False
+    assert state.attributes["monitor_type"] == "webpage"
+    assert state.attributes["webpage_check"] == "overall"
+    assert state.attributes["device_name"] == "Status Page"
+    alerts.assert_awaited_once_with(overall_id, entry.data[CONF_TARGETS][0])
+    assert hass.states.get(
+        by_unique_id[f"connectivity_webpage_dns_{url}"]
+    ).state == "Resolved"
+    assert hass.states.get(
+        by_unique_id[f"connectivity_webpage_http_{url}"]
+    ).state == "Reachable"
+    response_time = hass.states.get(
+        by_unique_id[f"connectivity_webpage_response_time_{url}"]
+    )
+    assert response_time.attributes["monitor_type"] == "webpage"
+    assert response_time.attributes["webpage_check"] == "response_time"
+    assert response_time.state == "42"
+    assert response_time.attributes["unit_of_measurement"] == "ms"
+    if url.startswith("https://"):
+        assert hass.states.get(
+            by_unique_id[f"connectivity_webpage_certificate_{url}"]
+        ).state == "Expiring Soon"
+        assert hass.states.get(
+            by_unique_id[f"connectivity_webpage_certificate_days_{url}"]
+        ).state == "7"
+    if text:
+        assert hass.states.get(
+            by_unique_id[f"connectivity_webpage_content_{url}"]
+        ).state == "Missing"
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert len(devices) == 1
+    assert devices[0].model == "WebPage Monitor"
+    assert (DOMAIN, f"webpage:{url}") in devices[0].identifiers
 
 
 async def test_network_sensors_expose_expected_state(

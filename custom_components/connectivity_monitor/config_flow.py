@@ -24,17 +24,21 @@ from .const import (
     CONF_ALERT_GROUP,
     CONF_ALERTS_ENABLED,
     CONF_BLUETOOTH_ADDRESS,
+    CONF_CERTIFICATE_WARNING_DAYS,
     CONF_DNS_SERVER,
     CONF_ESPHOME_DEVICE_ID,
+    CONF_EXPECTED_TEXT,
     CONF_INACTIVE_TIMEOUT,
     CONF_INTERVAL,
     CONF_MATTER_NODE_ID,
     CONF_PROTOCOL,
     CONF_TARGETS,
+    CONF_URL,
     CONF_ZHA_IEEE,
     DEFAULT_ALERT_ACTION_DELAY,
     DEFAULT_ALERT_DELAY,
     DEFAULT_ALERT_GROUP,
+    DEFAULT_CERTIFICATE_WARNING_DAYS,
     DEFAULT_DNS_SERVER,
     DEFAULT_INACTIVE_TIMEOUT,
     DEFAULT_INTERVAL,
@@ -48,11 +52,13 @@ from .const import (
     PROTOCOL_MATTER,
     PROTOCOL_TCP,
     PROTOCOL_UDP,
+    PROTOCOL_WEBPAGE,
     PROTOCOL_ZHA,
 )
 from .esphome import async_get_esphome_devices
 from .matter import async_get_matter_devices
 from .network import NetworkProbe
+from .webpage import validate_webpage_url
 from .zha import async_get_zha_devices
 
 _LOGGER = logging.getLogger(__name__)
@@ -63,6 +69,69 @@ NETWORK_PROTOCOLS = {
     PROTOCOL_ICMP,
     PROTOCOL_AD_DC,
 }
+
+
+def _webpage_schema(
+    settings: dict, notify_groups: dict, alert_actions: dict
+) -> vol.Schema:
+    """Build the shared webpage setup and editing form."""
+    schema = {
+        vol.Required(CONF_URL, default=settings.get(CONF_URL, "")): str,
+        vol.Optional("device_name", default=settings.get("device_name", "")): str,
+        vol.Optional(
+            CONF_EXPECTED_TEXT, default=settings.get(CONF_EXPECTED_TEXT, "")
+        ): str,
+        vol.Required(
+            CONF_CERTIFICATE_WARNING_DAYS,
+            default=settings.get(
+                CONF_CERTIFICATE_WARNING_DAYS, DEFAULT_CERTIFICATE_WARNING_DAYS
+            ),
+        ): vol.All(vol.Coerce(int), vol.Range(min=0, max=3650)),
+        vol.Optional(
+            CONF_ALERTS_ENABLED, default=bool(settings.get(CONF_ALERT_GROUP))
+        ): bool,
+        vol.Required(
+            CONF_ALERT_DELAY, default=settings.get(CONF_ALERT_DELAY, DEFAULT_ALERT_DELAY)
+        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=60)),
+        vol.Optional(
+            CONF_ALERT_ACTION_ENABLED, default=bool(settings.get(CONF_ALERT_ACTION))
+        ): bool,
+        vol.Required(
+            CONF_ALERT_ACTION_DELAY,
+            default=settings.get(CONF_ALERT_ACTION_DELAY, DEFAULT_ALERT_ACTION_DELAY),
+        ): vol.All(vol.Coerce(int), vol.Range(min=1, max=120)),
+    }
+    if notify_groups:
+        schema[
+            vol.Optional(CONF_ALERT_GROUP, default=settings.get(CONF_ALERT_GROUP) or "")
+        ] = vol.In({"": "No alert group", **notify_groups})
+    if alert_actions:
+        schema[
+            vol.Optional(CONF_ALERT_ACTION, default=settings.get(CONF_ALERT_ACTION) or "")
+        ] = vol.In({"": "No action", **alert_actions})
+    return vol.Schema(schema)
+
+
+def _webpage_target(user_input: dict) -> dict:
+    """Validate settings and construct the URL-identified target."""
+    url = validate_webpage_url(user_input[CONF_URL])
+    return {
+        **user_input,
+        CONF_URL: url,
+        CONF_HOST: url,
+        CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+        "device_name": user_input.get("device_name", "").strip() or url,
+        CONF_ALERT_GROUP: (
+            user_input.get(CONF_ALERT_GROUP)
+            if user_input.get(CONF_ALERTS_ENABLED)
+            else None
+        ),
+        CONF_ALERT_ACTION: (
+            user_input.get(CONF_ALERT_ACTION, "")
+            if user_input.get(CONF_ALERT_ACTION_ENABLED)
+            else ""
+        ),
+    }
 
 
 def is_valid_ip(ip: str) -> bool:
@@ -84,6 +153,7 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         "esphome": "connectivity_monitor_esphome",
         "matter": "connectivity_monitor_matter",
         "network": "connectivity_monitor_network",
+        "webpage": "connectivity_monitor_webpage",
         "zha": "connectivity_monitor_zha",
     }
     ENTRY_TITLES = {
@@ -91,6 +161,7 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         "esphome": "ESPHome Monitor",
         "matter": "Matter Monitor",
         "network": "Network Monitor",
+        "webpage": "WebPage Monitor",
         "zha": "ZigBee Monitor",
     }
 
@@ -224,6 +295,8 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_esphome_device()
             if user_input["device_type"] == "bluetooth":
                 return await self.async_step_bluetooth_device()
+            if user_input["device_type"] == "webpage":
+                return await self.async_step_webpage()
             return await self.async_step_network()
 
         return self.async_show_form(
@@ -236,11 +309,44 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             "esphome": "ESPHome Device",
                             "matter": "Matter Device",
                             "network": "Network Device (TCP / UDP / ICMP / AD)",
+                            "webpage": "WebPage",
                             "zha": "ZigBee Device (ZHA)",
                         }
                     ),
                 }
             ),
+        )
+
+    async def async_step_webpage(self, user_input=None) -> ConfigFlowResult:
+        """Configure a webpage, including targets that are currently unhealthy."""
+        errors = {}
+        if user_input is not None:
+            try:
+                target = _webpage_target(user_input)
+            except ValueError:
+                errors[CONF_URL] = "invalid_url"
+            else:
+                existing_urls = {
+                    t.get(CONF_URL)
+                    for entry in self._async_current_entries()
+                    for t in entry.data.get(CONF_TARGETS, [])
+                }
+                if target[CONF_URL] in existing_urls:
+                    errors[CONF_URL] = "already_configured"
+                else:
+                    self._data[CONF_TARGETS] = [target]
+                    self._data[CONF_PROTOCOL] = PROTOCOL_WEBPAGE
+                    if not self._async_current_entries():
+                        return await self.async_step_interval()
+                    return await self.async_step_finish()
+        return self.async_show_form(
+            step_id="webpage",
+            data_schema=_webpage_schema(
+                user_input or {},
+                await self._async_get_notify_groups(),
+                await self._async_get_alert_actions(),
+            ),
+            errors=errors,
         )
 
     async def async_step_network(self, user_input=None) -> ConfigFlowResult:
@@ -968,6 +1074,8 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry_type = "esphome"
         elif protocol == PROTOCOL_BLUETOOTH:
             entry_type = "bluetooth"
+        elif protocol == PROTOCOL_WEBPAGE:
+            entry_type = "webpage"
         else:
             entry_type = "network"
 
@@ -1031,6 +1139,11 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         for t in new_items
                         if t.get(CONF_ESPHOME_DEVICE_ID) not in existing_keys
                     )
+                elif entry_type == "webpage":
+                    existing_keys = {t.get(CONF_URL) for t in existing}
+                    existing.extend(
+                        t for t in new_items if t.get(CONF_URL) not in existing_keys
+                    )
                 else:  # bluetooth
                     existing_keys = {t.get(CONF_BLUETOOTH_ADDRESS) for t in existing}
                     existing.extend(
@@ -1047,6 +1160,11 @@ class ConnectivityMonitorConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_INTERVAL: self._data.get(CONF_INTERVAL, DEFAULT_INTERVAL),
             CONF_DNS_SERVER: self._data.get(CONF_DNS_SERVER, DEFAULT_DNS_SERVER),
         }
+        if typed_entry and entry_type == "webpage":
+            data[CONF_INTERVAL] = typed_entry.data.get(CONF_INTERVAL, DEFAULT_INTERVAL)
+            data[CONF_DNS_SERVER] = typed_entry.data.get(
+                CONF_DNS_SERVER, DEFAULT_DNS_SERVER
+            )
 
         if typed_entry:
             self.hass.config_entries.async_update_entry(typed_entry, data=data)
@@ -1070,6 +1188,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         ConnectivityMonitorConfigFlow.ENTRY_UNIQUE_IDS["matter"]: "matter",
         ConnectivityMonitorConfigFlow.ENTRY_UNIQUE_IDS["esphome"]: "esphome",
         ConnectivityMonitorConfigFlow.ENTRY_UNIQUE_IDS["bluetooth"]: "bluetooth",
+        ConnectivityMonitorConfigFlow.ENTRY_UNIQUE_IDS["webpage"]: "webpage",
     }
 
     def __init__(self) -> None:
@@ -1124,12 +1243,21 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             return "esphome"
         if any(t.get(CONF_PROTOCOL) == PROTOCOL_BLUETOOTH for t in self._targets):
             return "bluetooth"
+        if any(t.get(CONF_PROTOCOL) == PROTOCOL_WEBPAGE for t in self._targets):
+            return "webpage"
         return "network"
 
     def _get_menu_actions(self) -> dict[str, str]:
         """Build the top-level options menu for the current entry type."""
         entry_type = self._get_entry_type()
         common_actions = {"settings": "General Settings"}
+
+        if entry_type == "webpage":
+            return {
+                "webpage": "Modify WebPage Checks and Alerts",
+                "remove_device": "Remove WebPage",
+                **common_actions,
+            }
 
         if entry_type == "network":
             return {
@@ -1158,6 +1286,8 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             action = user_input["action"]
             entry_type = self._get_entry_type()
 
+            if action == "webpage" and entry_type == "webpage":
+                return await self.async_step_webpage_select()
             if action == "rename":
                 return await self.async_step_rename_device_select()
             if action == "alerts":
@@ -1172,7 +1302,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 if entry_type == "bluetooth":
                     return await self.async_step_bluetooth_alert_select()
             elif action == "remove_device":
-                if entry_type == "network":
+                if entry_type in ("network", "webpage"):
                     return await self.async_step_remove_device()
                 if entry_type == "zha":
                     return await self.async_step_remove_zha_device()
@@ -1196,6 +1326,65 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     vol.Required("action"): vol.In(actions),
                 }
             ),
+        )
+
+    async def async_step_webpage_select(self, user_input=None) -> ConfigFlowResult:
+        """Select the webpage to edit."""
+        if user_input is not None:
+            self._selected_device = user_input[CONF_URL]
+            return await self.async_step_webpage()
+        return self.async_show_form(
+            step_id="webpage_select",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_URL): vol.In(
+                        {
+                            t[CONF_URL]: t.get("device_name") or t[CONF_URL]
+                            for t in self._targets
+                            if t[CONF_PROTOCOL] == PROTOCOL_WEBPAGE
+                        }
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_webpage(self, user_input=None) -> ConfigFlowResult:
+        """Edit webpage checks and alerts, preserving identity when unchanged."""
+        current = next(
+            t for t in self._targets if t.get(CONF_URL) == self._selected_device
+        )
+        errors = {}
+        if user_input is not None:
+            try:
+                target = _webpage_target(user_input)
+            except ValueError:
+                errors[CONF_URL] = "invalid_url"
+            else:
+                if any(
+                    t is not current and t.get(CONF_URL) == target[CONF_URL]
+                    for t in self._targets
+                ):
+                    errors[CONF_URL] = "already_configured"
+                else:
+                    self._targets = [
+                        target if t is current else t for t in self._targets
+                    ]
+                    self.config_data[CONF_TARGETS] = self._targets
+                    self.hass.config_entries.async_update_entry(
+                        self.config_entry, data=self.config_data
+                    )
+                    await self.hass.config_entries.async_reload(
+                        self.config_entry.entry_id
+                    )
+                    return self.async_create_entry(title="", data={})
+        return self.async_show_form(
+            step_id="webpage",
+            data_schema=_webpage_schema(
+                user_input or current,
+                await self._async_get_notify_groups(),
+                await self._async_get_alert_actions(),
+            ),
+            errors=errors,
         )
 
     async def async_step_settings_menu(self, user_input=None) -> ConfigFlowResult:

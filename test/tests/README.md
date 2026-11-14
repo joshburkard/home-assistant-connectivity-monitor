@@ -24,6 +24,13 @@ Most tests mock the real network or device lookups. That keeps the suite determi
 
 ## How To Run These Tests
 
+The Lovelace card regression tests use Node.js's built-in test runner (no npm
+dependencies required):
+
+```powershell
+node --test test\tests\test_card.cjs
+```
+
 From the repository root, run the integration test suite with pytest.
 
 If your virtual environment is already activated, a common command is:

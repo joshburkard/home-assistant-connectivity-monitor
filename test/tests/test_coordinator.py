@@ -14,6 +14,8 @@ from custom_components.connectivity_monitor.const import (
     CONF_PORT,
     CONF_PROTOCOL,
     CONF_ZHA_IEEE,
+    CONF_URL,
+    PROTOCOL_WEBPAGE,
     DEFAULT_DNS_SERVER,
     DOMAIN,
     PROTOCOL_AD_DC,
@@ -53,6 +55,31 @@ def _create_coordinator(
         dns_server=DEFAULT_DNS_SERVER,
         config_entry=config_entry,
     )
+
+
+async def test_webpage_dispatch_skips_network_dns(hass: HomeAssistant) -> None:
+    """Webpage URLs are keyed separately and never sent to the network resolver."""
+    target = {
+        CONF_URL: "https://example.com/status",
+        CONF_HOST: "https://example.com/status",
+        CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+    }
+    coordinator = _create_coordinator(hass, [target])
+    with (
+        patch.object(
+            coordinator._network_probe, "async_prepare_host", AsyncMock()
+        ) as prepare,
+        patch.object(
+            coordinator._webpage_probe, "async_update_target",
+            AsyncMock(return_value={"connected": True, "http_status": 200}),
+        ) as probe,
+    ):
+        result = await coordinator._async_update_data()
+    prepare.assert_not_awaited()
+    probe.assert_awaited_once_with(target)
+    assert result == {
+        "WEBPAGE:https://example.com/status": {"connected": True, "http_status": 200}
+    }
 
 
 @pytest.mark.parametrize(

@@ -5,10 +5,15 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from ipaddress import ip_address as _parse_ip_address
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from homeassistant.components.sensor import SensorEntity, SensorStateClass
-from homeassistant.const import STATE_UNAVAILABLE, STATE_UNKNOWN, EntityCategory
+from homeassistant.const import (
+    STATE_UNAVAILABLE,
+    STATE_UNKNOWN,
+    EntityCategory,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
@@ -53,6 +58,11 @@ from .const import (
     PROTOCOL_MATTER,
     PROTOCOL_TCP,
     PROTOCOL_ZHA,
+    PROTOCOL_WEBPAGE,
+    CONF_URL,
+    CONF_EXPECTED_TEXT,
+    CONF_CERTIFICATE_WARNING_DAYS,
+    DEFAULT_CERTIFICATE_WARNING_DAYS,
     VERSION,
 )
 from .coordinator import ConnectivityMonitorConfigEntry, ConnectivityMonitorCoordinator
@@ -125,7 +135,8 @@ async def async_setup_entry(  # noqa: C901
 
     # Separate ZHA targets from regular network targets
     network_targets = [
-        t for t in targets if t.get(CONF_PROTOCOL) not in NON_NETWORK_PROTOCOLS
+        t for t in targets
+        if t.get(CONF_PROTOCOL) not in (*NON_NETWORK_PROTOCOLS, PROTOCOL_WEBPAGE)
     ]
     zha_targets = [t for t in targets if t.get(CONF_PROTOCOL) == PROTOCOL_ZHA]
     matter_targets = [t for t in targets if t.get(CONF_PROTOCOL) == PROTOCOL_MATTER]
@@ -144,6 +155,33 @@ async def async_setup_entry(  # noqa: C901
     )
     new_unique_ids: set[str] = set()
     entities: list[SensorEntity] = []
+    for target in targets:
+        if target.get(CONF_PROTOCOL) == PROTOCOL_WEBPAGE:
+            overall = WebPageSensor(coordinator, target)
+            overall._alert_handler = alert_handler
+            webpage_sensors: list[SensorEntity] = [
+                overall,
+                WebPageCheckSensor(coordinator, target, "dns"),
+                WebPageCheckSensor(coordinator, target, "http"),
+                WebPageCheckSensor(coordinator, target, "response_time"),
+            ]
+            if target[CONF_URL].startswith("https://"):
+                webpage_sensors.extend(
+                    [
+                        WebPageCheckSensor(coordinator, target, "certificate"),
+                        WebPageCheckSensor(coordinator, target, "certificate_days"),
+                    ]
+                )
+            if target.get(CONF_EXPECTED_TEXT):
+                webpage_sensors.append(
+                    WebPageCheckSensor(coordinator, target, "content")
+                )
+            entities.extend(webpage_sensors)
+            new_unique_ids.update(
+                sensor.unique_id
+                for sensor in webpage_sensors
+                if sensor.unique_id is not None
+            )
 
     # Group network targets by host
     host_targets: dict[str, list[dict]] = {}
@@ -965,6 +1003,147 @@ class AlertingConnectivityEntity(ConnectivityMonitorEntity):
         super().async_entity_id_changed(old_entity_id)
         if self._alerts_configured():
             self._alert_handler.async_move_alerts(old_entity_id, self.entity_id)
+
+
+class WebPageSensor(AlertingConnectivityEntity, SensorEntity):
+    """Combined webpage health with diagnostic attributes for each check."""
+
+    def __init__(
+        self, coordinator: ConnectivityMonitorCoordinator, target: dict
+    ) -> None:
+        """Initialize a URL-identified webpage sensor."""
+        super().__init__(coordinator, target)
+        self._attr_has_entity_name = True
+        self._attr_name = "Overall Status"
+        self._attr_unique_id = f"connectivity_webpage_{target[CONF_URL]}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"webpage:{target[CONF_URL]}")},
+            name=target.get("device_name") or target[CONF_URL],
+            manufacturer="Connectivity Monitor",
+            model="WebPage Monitor",
+            hw_version=target[CONF_HOST],
+            sw_version=VERSION,
+        )
+
+    @property
+    def native_value(self) -> str:
+        """Use the existing connected states to participate in alert handling."""
+        if not self.target_data:
+            return "Unknown"
+        return "Connected" if self.target_data.get("connected") else "Disconnected"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose independent checks without retaining webpage content."""
+        return {
+            "url": self.target[CONF_URL],
+            "monitor_type": "webpage",
+            "webpage_check": "overall",
+            "device_name": self.target.get("device_name") or self.target[CONF_URL],
+            "text_check_enabled": bool(self.target.get(CONF_EXPECTED_TEXT)),
+            CONF_CERTIFICATE_WARNING_DAYS: self.target.get(
+                CONF_CERTIFICATE_WARNING_DAYS, DEFAULT_CERTIFICATE_WARNING_DAYS
+            ),
+            **self.target_data,
+        }
+
+    @property
+    def icon(self) -> str:
+        """Return webpage health icon."""
+        return "mdi:web-check" if self.target_data.get("connected") else "mdi:web-off"
+
+
+type WebPageCheck = Literal[
+    "dns", "http", "certificate", "content", "response_time", "certificate_days"
+]
+
+
+class WebPageCheckSensor(ConnectivityMonitorEntity, SensorEntity):
+    """An independent webpage check sharing the overall sensor's device."""
+
+    def __init__(
+        self,
+        coordinator: ConnectivityMonitorCoordinator,
+        target: dict,
+        check: WebPageCheck,
+    ) -> None:
+        """Initialize a check-specific sensor."""
+        super().__init__(coordinator, target)
+        self._check = check
+        self._attr_has_entity_name = True
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+        self._attr_name, self._attr_icon = {
+            "dns": ("DNS Status", "mdi:dns"),
+            "http": ("WebPage Reachable", "mdi:web-check"),
+            "certificate": ("Certificate Status", "mdi:certificate"),
+            "content": ("Content Status", "mdi:text-box-check"),
+            "response_time": ("Response Time", "mdi:timer-outline"),
+            "certificate_days": ("Certificate Days Remaining", "mdi:calendar-clock"),
+        }[check]
+        self._attr_unique_id = f"connectivity_webpage_{check}_{target[CONF_URL]}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"webpage:{target[CONF_URL]}")},
+        )
+        if check in ("response_time", "certificate_days"):
+            self._attr_native_unit_of_measurement = (
+                UnitOfTime.MILLISECONDS if check == "response_time" else UnitOfTime.DAYS
+            )
+            self._attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> str | float | None:
+        """Return the check result without conflating unrelated failures."""
+        data = self.target_data
+        if self._check == "response_time":
+            return data.get("latency")
+        if self._check == "certificate_days":
+            return data.get("certificate_days_remaining")
+        if not data:
+            return "Unknown"
+        if self._check == "dns":
+            if "dns_resolved" not in data:
+                return "Unknown"
+            return "Resolved" if data["dns_resolved"] else "Failed"
+        if self._check == "http":
+            if data.get("http_status") is None and not data.get("http_error"):
+                return "Unknown"
+            return "Reachable" if data.get("http_available") else "Unreachable"
+        if self._check == "certificate":
+            if data.get("certificate_valid") is False:
+                return "Invalid"
+            if data.get("certificate_error"):
+                return "Error"
+            if data.get("certificate_valid") is None:
+                return "Unknown"
+            return "Expiring Soon" if data.get("certificate_expiring_soon") else "Valid"
+        if data.get("content_error"):
+            return "Error"
+        if data.get("text_found") is None:
+            return "Not Checked"
+        return "Found" if data["text_found"] else "Missing"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose only diagnostics relevant to this check."""
+        keys = {
+            "dns": ("resolved_ips", "dns_error"),
+            "http": ("http_status", "http_error"),
+            "certificate": (
+                "certificate_expires_at",
+                "certificate_days_remaining",
+                "certificate_expiring_soon",
+                "certificate_error",
+            ),
+            "content": ("content_error",),
+            "response_time": ("http_status", "http_error"),
+            "certificate_days": ("certificate_expires_at", "certificate_error"),
+        }[self._check]
+        return {
+            "url": self.target[CONF_URL],
+            "monitor_type": "webpage",
+            "webpage_check": self._check,
+            **{key: self.target_data.get(key) for key in keys},
+        }
 
 
 class ConnectivitySensor(ConnectivityMonitorEntity, SensorEntity):
