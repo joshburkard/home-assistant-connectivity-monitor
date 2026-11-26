@@ -1721,6 +1721,7 @@ class BluetoothSensor(AlertingConnectivityEntity, SensorEntity):
 _COUNT_MODE_ACTIVE_INACTIVE = "active_inactive"
 _COUNT_MODE_NETWORK_DEVICE = "network_device"
 _COUNT_MODE_NETWORK_PORT = "network_port"
+_COUNT_MODE_CERTIFICATE = "certificate"
 
 
 class _SummarySensorConfig(TypedDict):
@@ -1774,12 +1775,19 @@ def _summary_sensor_configs(
                 None,
             )
         )
+        if protocol == PROTOCOL_WEBPAGE:
+            groups.append(
+                (key, label, group_targets, _COUNT_MODE_CERTIFICATE, None)
+            )
 
     configs: list[_SummarySensorConfig] = []
     for key, label, group_targets, mode, hosts in groups:
         if not group_targets:
             continue
         statuses = (
+            ("expiring",)
+            if mode == _COUNT_MODE_CERTIFICATE
+            else
             ("active", "inactive")
             if mode == _COUNT_MODE_ACTIVE_INACTIVE
             else
@@ -1789,6 +1797,7 @@ def _summary_sensor_configs(
             ("connected", "disconnected")
         )
         suffix = (
+            "certificates" if mode == _COUNT_MODE_CERTIFICATE else
             "ports" if key == "network" and mode == _COUNT_MODE_NETWORK_PORT else "devices"
         )
         for status in statuses:
@@ -1887,7 +1896,7 @@ class ConnectivityCountSensor(
             host_groups:      For network-device mode: mapping of host -> target list.
                               None for other modes.
             status_to_count:  One of "active", "inactive", "connected",
-                              "partially_connected", "disconnected".
+                              "partially_connected", "disconnected", "expiring".
             count_mode:       One of the _COUNT_MODE_* constants.
         """
         super().__init__(coordinator)
@@ -1912,35 +1921,61 @@ class ConnectivityCountSensor(
     @property
     def native_value(self) -> int:
         """Return the current count."""
+        return len(self._matching_targets())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """List the devices or checks contributing to this counter."""
+        keys = (
+            (CONF_HOST,)
+            if self._count_mode == _COUNT_MODE_NETWORK_DEVICE
+            else (
+                CONF_HOST,
+                CONF_URL,
+                CONF_ZHA_IEEE,
+                CONF_MATTER_NODE_ID,
+                CONF_ESPHOME_DEVICE_ID,
+                CONF_BLUETOOTH_ADDRESS,
+                CONF_PROTOCOL,
+                CONF_PORT,
+            )
+        )
+        devices = []
+        for target in self._matching_targets():
+            details = {key: target[key] for key in keys if key in target}
+            name = target.get("device_name") or str(
+                next(iter(details.values()), target[CONF_PROTOCOL])
+            )
+            devices.append({"name": name, **details})
+        return {"affected_devices": devices}
+
+    def _matching_targets(self) -> list[dict]:
+        """Select counted targets once per host for network-device counters."""
         if self._count_mode == _COUNT_MODE_NETWORK_DEVICE:
-            return self._count_network_devices()
-        if self._count_mode == _COUNT_MODE_NETWORK_PORT:
-            return self._count_network_ports()
-        return self._count_active_inactive()
-
-    # -- helpers ----------------------------------------------------------------
-
-    def _count_active_inactive(self) -> int:
-        count = 0
+            return self._matching_network_devices()
+        matches = []
         for target in self._targets:
             data = self.coordinator.get_target_data(target)
-            if not data.get("device_found", True):
-                # device not found in HA — treat as inactive
-                if self._status_to_count == "inactive":
-                    count += 1
+            if self._count_mode == _COUNT_MODE_CERTIFICATE:
+                if (
+                    data.get("certificate_valid") is True
+                    and data.get("certificate_expiring_soon") is True
+                ):
+                    matches.append(target)
                 continue
-            active = data.get("active", False)
-            if self._status_to_count == "active" and active:
-                count += 1
-            elif self._status_to_count == "inactive" and not active:
-                count += 1
-        return count
+            if self._count_mode == _COUNT_MODE_NETWORK_PORT:
+                status = "connected" if data.get("connected") else "disconnected"
+            else:
+                active = data.get("device_found", True) and data.get("active", False)
+                status = "active" if active else "inactive"
+            if status == self._status_to_count:
+                matches.append(target)
+        return matches
 
-    def _count_network_devices(self) -> int:
-        if not self._host_groups:
-            return 0
-        count = 0
-        for host_target_list in self._host_groups.values():
+    def _matching_network_devices(self) -> list[dict]:
+        """Group all checks for a host before selecting its overall status."""
+        matches = []
+        for host_target_list in (self._host_groups or {}).values():
             all_connected = True
             any_connected = False
             for t in host_target_list:
@@ -1956,16 +1991,5 @@ class ConnectivityCountSensor(
             else:
                 device_status = "disconnected"
             if device_status == self._status_to_count:
-                count += 1
-        return count
-
-    def _count_network_ports(self) -> int:
-        count = 0
-        for target in self._targets:
-            data = self.coordinator.get_target_data(target)
-            connected = data.get("connected", False)
-            if self._status_to_count == "connected" and connected:
-                count += 1
-            elif self._status_to_count == "disconnected" and not connected:
-                count += 1
-        return count
+                matches.append(host_target_list[0])
+        return matches

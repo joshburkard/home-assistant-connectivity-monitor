@@ -211,8 +211,6 @@ class WebPageProbe:
                 failures.append(result["certificate_error"])
             elif result["certificate_valid"] is not True:
                 failures.append("certificate_invalid")
-            elif result["certificate_expiring_soon"]:
-                failures.append("certificate_expiring")
         result["errors"] = failures
         result["error"] = failures[0] if failures else None
         result["connected"] = not failures

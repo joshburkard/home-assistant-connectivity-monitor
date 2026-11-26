@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from freezegun.api import FrozenDateTimeFactory
 import pytest
@@ -42,7 +42,11 @@ from custom_components.connectivity_monitor.const import (
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr, entity_registry as er
-from custom_components.connectivity_monitor.sensor import AlertHandler
+from custom_components.connectivity_monitor.sensor import (
+    AlertHandler,
+    ConnectivityCountSensor,
+    _summary_sensor_configs,
+)
 
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
@@ -82,11 +86,12 @@ def _alerting_network_config_entry(
 
 
 @pytest.mark.parametrize(
-    ("url", "text", "sensor_count"),
+    ("url", "text", "sensor_count", "connected"),
     [
-        ("http://example.com/", "", 4),
-        ("https://example.com/", "", 6),
-        ("https://example.com/", "healthy", 7),
+        ("http://example.com/", "", 4, False),
+        ("https://example.com/", "", 6, False),
+        ("https://example.com/", "healthy", 7, False),
+        ("https://example.com/", "", 6, True),
     ],
 )
 async def test_webpage_sensors_expose_checks_and_register_alerts(
@@ -94,6 +99,7 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
     url: str,
     text: str,
     sensor_count: int,
+    connected: bool,
 ) -> None:
     """Create conditional detail sensors on one device; only overall sends alerts."""
     entry = MockConfigEntry(
@@ -121,7 +127,7 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
             "custom_components.connectivity_monitor.webpage."
             "WebPageProbe.async_update_target",
             AsyncMock(return_value={
-                "connected": False,
+                "connected": connected,
                 "dns_resolved": True,
                 "resolved_ips": ["192.0.2.1"],
                 "http_available": True,
@@ -131,7 +137,7 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
                 "certificate_expiring_soon": True,
                 "certificate_days_remaining": 7,
                 "latency": 42,
-                "error": "text_missing",
+                "error": None if connected else "text_missing",
             }),
         ),
         patch(
@@ -148,7 +154,7 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
     overall_id = by_unique_id[f"connectivity_webpage_{url}"]
     state = hass.states.get(overall_id)
     assert state is not None
-    assert state.state == "Disconnected"
+    assert state.state == ("Connected" if connected else "Disconnected")
     assert state.attributes["http_available"] is True
     assert state.attributes["text_found"] is False
     assert state.attributes["monitor_type"] == "webpage"
@@ -188,9 +194,10 @@ async def test_webpage_sensors_expose_checks_and_register_alerts(
         if configured.unique_id == SUMMARY_UNIQUE_ID
     )
     summary_entities = er.async_entries_for_config_entry(er.async_get(hass), summary.entry_id)
-    assert len(summary_entities) == 2
-    assert hass.states.get("sensor.connectivity_monitor_webpage_connected_devices").state == "0"
-    assert hass.states.get("sensor.connectivity_monitor_webpage_disconnected_devices").state == "1"
+    assert len(summary_entities) == 3
+    assert hass.states.get("sensor.connectivity_monitor_webpage_connected_devices").state == str(int(connected))
+    assert hass.states.get("sensor.connectivity_monitor_webpage_disconnected_devices").state == str(int(not connected))
+    assert hass.states.get("sensor.connectivity_monitor_webpage_expiring_certificates").state == "1"
 
 
 async def test_clearing_webpage_text_removes_content_sensor(
@@ -728,6 +735,105 @@ async def test_summary_entity_registry_entry_survives_reload(
     assert entity_registry.async_get(restored).device_id is not None
 
 
+@pytest.mark.parametrize(
+    ("count_key", "indices"),
+    [
+        ("network_connected_devices", [0]),
+        ("network_partially_connected_devices", [2]),
+        ("network_disconnected_devices", [4]),
+        ("network_connected_ports", [0, 1, 2]),
+        ("network_disconnected_ports", [3, 4, 5]),
+    ],
+)
+def test_summary_lists_matching_network_devices_and_ports(
+    count_key: str, indices: list[int],
+) -> None:
+    """Device lists group hosts while port lists identify individual checks."""
+    targets = [
+        {
+            CONF_HOST: host,
+            CONF_PROTOCOL: PROTOCOL_TCP,
+            CONF_PORT: port,
+            **({"device_name": name} if name else {}),
+        }
+        for host, name in (
+            ("192.0.2.1", "Connected"),
+            ("192.0.2.2", "Partial"),
+            ("192.0.2.3", ""),
+        )
+        for port in (80, 443)
+    ]
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_TARGETS: targets})
+    config = next(
+        config for config in _summary_sensor_configs(entry)
+        if config["count_key"] == count_key
+    )
+    coordinator = MagicMock()
+    coordinator.get_target_data.side_effect = lambda target: {
+        "connected": targets.index(target) < 3,
+    }
+    sensor = ConnectivityCountSensor(coordinator, **config)
+    expected = [
+        {
+            "name": targets[index].get("device_name") or targets[index][CONF_HOST],
+            CONF_HOST: targets[index][CONF_HOST],
+            **(
+                {CONF_PROTOCOL: PROTOCOL_TCP, CONF_PORT: targets[index][CONF_PORT]}
+                if count_key.endswith("_ports") else {}
+            ),
+        }
+        for index in indices
+    ]
+    assert sensor.native_value == len(expected)
+    assert sensor.extra_state_attributes == {"affected_devices": expected}
+    coordinator.get_target_data.return_value = {"connected": True}
+    coordinator.get_target_data.side_effect = None
+    if "disconnected" in count_key or "partially_connected" in count_key:
+        assert sensor.native_value == 0
+        assert sensor.extra_state_attributes == {"affected_devices": []}
+
+
+@pytest.mark.parametrize(
+    ("protocol", "identity_key"),
+    [
+        (PROTOCOL_ZHA, CONF_ZHA_IEEE),
+        (PROTOCOL_MATTER, CONF_MATTER_NODE_ID),
+        (PROTOCOL_ESPHOME, CONF_ESPHOME_DEVICE_ID),
+        (PROTOCOL_BLUETOOTH, CONF_BLUETOOTH_ADDRESS),
+    ],
+)
+def test_summary_lists_active_inactive_and_missing_devices(
+    protocol: str, identity_key: str,
+) -> None:
+    """Inactive lists include missing devices and targets without polling data."""
+    targets = [
+        {CONF_PROTOCOL: protocol, identity_key: str(index), "device_name": name}
+        for index, name in enumerate(("Active", "Inactive", "Missing", "Unknown"))
+    ]
+    data = [
+        {"active": True},
+        {"active": False},
+        {"device_found": False, "active": True},
+        {},
+    ]
+    entry = MockConfigEntry(domain=DOMAIN, data={CONF_TARGETS: targets})
+    coordinator = MagicMock()
+    coordinator.get_target_data.side_effect = lambda target: data[targets.index(target)]
+    for config in _summary_sensor_configs(entry):
+        sensor = ConnectivityCountSensor(coordinator, **config)
+        indices = [0] if config["status_to_count"] == "active" else [1, 2, 3]
+        expected = [
+            {
+                "name": targets[index]["device_name"],
+                identity_key: str(index),
+                CONF_PROTOCOL: protocol,
+            }
+            for index in indices
+        ]
+        assert sensor.native_value == len(expected)
+        assert sensor.extra_state_attributes == {"affected_devices": expected}
+
+
 async def test_summary_shares_device_and_updates_webpage_counts(
     hass: HomeAssistant,
     network_config_entry: MockConfigEntry,
@@ -760,7 +866,14 @@ async def test_summary_shares_device_and_updates_webpage_counts(
         ),
         patch(
             "custom_components.connectivity_monitor.webpage.WebPageProbe.async_update_target",
-            AsyncMock(side_effect=[{"connected": True}, {"connected": False}]),
+            AsyncMock(side_effect=[
+                {
+                    "connected": True,
+                    "certificate_valid": True,
+                    "certificate_expiring_soon": True,
+                },
+                {"connected": False},
+            ]),
         ),
     ):
         assert await hass.config_entries.async_setup(network_config_entry.entry_id)
@@ -774,29 +887,68 @@ async def test_summary_shares_device_and_updates_webpage_counts(
     )
     registry = er.async_get(hass)
     counters = er.async_entries_for_config_entry(registry, summary.entry_id)
-    assert len(counters) == 7
+    assert len(counters) == 8
     assert len({counter.device_id for counter in counters}) == 1
     summary_devices = dr.async_entries_for_config_entry(dr.async_get(hass), summary.entry_id)
     assert len(summary_devices) == 1
     assert summary_devices[0].name == "Connectivity Monitor Summary"
     connected_id = "sensor.connectivity_monitor_webpage_connected_devices"
     disconnected_id = "sensor.connectivity_monitor_webpage_disconnected_devices"
+    expiring_id = "sensor.connectivity_monitor_webpage_expiring_certificates"
     assert hass.states.get(connected_id).state == "1"
     assert hass.states.get(disconnected_id).state == "1"
+    assert hass.states.get(expiring_id).state == "1"
 
     from custom_components.connectivity_monitor.coordinator import _target_key
 
     coordinator = webpage_entry.runtime_data.coordinator
+    coordinator.async_set_updated_data({
+        _target_key(targets[0]): {"connected": False},
+        _target_key(targets[1]): {
+            "connected": True,
+            "certificate_valid": True,
+            "certificate_expiring_soon": True,
+        },
+    })
+    await hass.async_block_till_done()
+    for entity_id, target in (
+        (connected_id, targets[1]),
+        (disconnected_id, targets[0]),
+        (expiring_id, targets[1]),
+    ):
+        state = hass.states.get(entity_id)
+        assert state.state == "1"
+        assert state.attributes["affected_devices"] == [{
+            "name": target["device_name"],
+            CONF_HOST: target[CONF_HOST],
+            CONF_URL: target[CONF_URL],
+            CONF_PROTOCOL: PROTOCOL_WEBPAGE,
+        }]
     coordinator.async_set_updated_data({
         _target_key(target): {"connected": True} for target in targets
     })
     await hass.async_block_till_done()
     assert hass.states.get(connected_id).state == "2"
     assert hass.states.get(disconnected_id).state == "0"
+    assert hass.states.get(expiring_id).state == "0"
+    assert hass.states.get(expiring_id).attributes["affected_devices"] == []
+    for certificate_valid, expected in ((True, "2"), (False, "0"), (None, "0")):
+        coordinator.async_set_updated_data({
+            _target_key(target): {
+                "connected": False,
+                "certificate_valid": certificate_valid,
+                "certificate_expiring_soon": True,
+            }
+            for target in targets
+        })
+        await hass.async_block_till_done()
+        assert hass.states.get(expiring_id).state == expected
+        assert len(hass.states.get(expiring_id).attributes["affected_devices"]) == int(expected)
     assert await hass.config_entries.async_remove(webpage_entry.entry_id)
     await hass.async_block_till_done()
     assert hass.states.get(connected_id) is None
     assert hass.states.get(disconnected_id) is None
+    assert hass.states.get(expiring_id) is None
     remaining = er.async_entries_for_config_entry(registry, summary.entry_id)
     assert len(remaining) == 5
     assert {counter.device_id for counter in remaining} == {summary_devices[0].id}

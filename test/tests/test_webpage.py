@@ -122,7 +122,7 @@ async def test_http_and_text_health(
     ("seconds", "warning_days", "healthy", "valid", "soon"),
     [
         (31 * 86400, 30, True, True, False),
-        (30 * 86400, 30, False, True, True),
+        (30 * 86400, 30, True, True, True),
         (30 * 86400 + 1, 30, True, True, False),
         (1, 0, True, True, False),
         (0, 0, False, False, True),
@@ -156,10 +156,12 @@ async def test_certificate_threshold(
     assert result["certificate_valid"] is valid
     assert result["certificate_expiring_soon"] is soon
     assert result["certificate_days_remaining"] == round(seconds / 86400, 2)
+    assert result["errors"] == ([] if valid else ["certificate_invalid"])
+    assert result["error"] == (None if valid else "certificate_invalid")
 
 
 async def test_redirect_checks_earliest_https_certificate() -> None:
-    """An expiring HTTPS redirect cannot be hidden by its healthy destination."""
+    """An expiring HTTPS redirect is reported without marking the page offline."""
     session = MagicMock()
     session.get.return_value = _response(
         "https://destination.example.com",
@@ -180,8 +182,9 @@ async def test_redirect_checks_earliest_https_certificate() -> None:
     ):
         result = await probe.async_update_target({CONF_URL: "https://example.com"})
     assert result["http_available"] is True
-    assert result["connected"] is False
+    assert result["connected"] is True
     assert result["certificate_expiring_soon"] is True
+    assert result["error"] is None
     assert check.await_count == 2
 
 

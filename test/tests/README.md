@@ -24,6 +24,12 @@ The tests in this folder verify four main areas:
 Summary tests verify that counters from different monitor types share a single
 device, retain entity IDs and custom names during migration and reload, follow
 WebPage overall-health updates, and disappear when their source entry is removed.
+Certificate expiry warnings keep healthy webpages connected. The expiring
+certificate counter tracks affected URLs independently of connectivity, excludes
+invalid or unknown certificates, and updates when warnings clear.
+All summary counters expose matching names and identifiers in `affected_devices`.
+Tests cover host grouping versus port details, inactive/missing devices, and list
+updates when the count stays unchanged.
 
 Most tests mock the real network or device lookups. That keeps the suite deterministic and proves the integration logic without depending on actual devices.
 

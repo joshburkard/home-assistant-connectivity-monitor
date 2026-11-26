@@ -30,10 +30,20 @@ A managed **Summary** integration entry groups all counter sensors on one
 **Connectivity Monitor Summary** device, instead of leaving them ungrouped.
 Existing counter entity IDs and custom names are preserved on upgrade.
 The counters reuse each monitor's coordinator data; no additional probes run.
+Click any summary sensor to see its `affected_devices` attribute in the more-info
+dialog. It lists exactly the devices or checks included in that count, with names
+and configured addresses/identifiers. Network-device counters list each host once;
+port counters also include protocol and port, and WebPage counters include the URL.
+An empty count has an empty list. The list refreshes with the count, including
+when devices swap status without changing the total.
 
 WebPage counters report **Connected Devices** and **Disconnected Devices**, one
 per configured URL based on overall health (including content and certificate
-checks). Summary counters update as source monitors refresh, are added, or removed.
+validity checks, but not expiry warnings). **WebPage Expiring Certificates** counts
+URLs with verified, still-valid certificates inside their configured warning
+threshold, independently of connectivity. Each URL counts once, even if multiple
+HTTPS redirect hops are expiring; expired, invalid, and unknown certificates are
+excluded. Summary counters update as source monitors refresh, are added, or removed.
 Configure monitoring through the original device-type entries; the Summary entry
 has no editable monitoring settings.
 
@@ -45,7 +55,9 @@ certificate warning threshold in days (default 30; 0 warns only at expiry).
 Each URL has an **Overall Status** sensor. It is `Connected` only when system DNS
 resolves the hostname, the final HTTP response is 2xx, the configured text is
 present, and all HTTPS redirect-hop
-certificates are trusted, valid, and outside the warning threshold.
+certificates are trusted and valid. A still-valid certificate inside the warning
+threshold remains `Connected` if the other checks pass; its Certificate Status is
+`Expiring Soon`. Expired or invalid certificates still cause `Disconnected`.
 
 Separate sensors identify which check failed:
 
@@ -61,6 +73,8 @@ Separate sensors identify which check failed:
 - **Certificate Days Remaining** (HTTPS targets): days until expiry.
 
 All sensors share one device; only Overall Status triggers configured alerts.
+Expiry warnings do not trigger outage alerts; use the expiring-certificates
+summary counter or individual Certificate Status sensors for renewal automations.
 Existing overall entity IDs are preserved when upgrading from WebPage Status.
 Checks remain independent: a content or certificate problem does not hide a
 successful HTTP response. Overall attributes also expose all failure reasons.
